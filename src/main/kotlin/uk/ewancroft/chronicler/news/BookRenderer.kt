@@ -24,7 +24,7 @@ class BookRenderer(
         meta.setGeneration(BookMeta.Generation.ORIGINAL)
 
         val pages = renderPages(newspaper)
-        meta.pages(pages)
+        meta.addPages(*pages.toTypedArray())
 
         book.itemMeta = meta
         return book
