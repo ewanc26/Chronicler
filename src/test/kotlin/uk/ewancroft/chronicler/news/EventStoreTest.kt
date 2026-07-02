@@ -82,6 +82,18 @@ class EventStoreTest {
     }
 
     @Test
+    fun `removeThrough preserves events after cutoff`() {
+        val store = EventStore(tempDir.resolve("events.json"))
+        store.record(event(EventType.DEATH, ts = 100L))
+        store.record(event(EventType.KILL, ts = 200L))
+        store.record(event(EventType.ADVANCEMENT, ts = 300L))
+
+        store.removeThrough(200L)
+
+        assertEquals(listOf(EventType.ADVANCEMENT), store.allEvents().map { it.type })
+    }
+
+    @Test
     fun `setMaxEvents prunes oldest events`() {
         val store = EventStore(tempDir.resolve("events.json"))
         store.setMaxEvents(3)

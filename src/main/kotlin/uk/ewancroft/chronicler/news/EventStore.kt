@@ -54,6 +54,12 @@ class EventStore(private val dataPath: Path) {
         }
     }
 
+    fun removeThrough(timestamp: Long) {
+        synchronized(events) {
+            events.removeAll { it.timestamp <= timestamp }
+        }
+    }
+
     fun save() {
         synchronized(events) {
             val jsonStr = json.encodeToString(events.toList())

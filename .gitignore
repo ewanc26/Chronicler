@@ -1,6 +1,7 @@
 build/
 .gradle/
 .idea/
+.letta/
 *.iml
 .DS_Store
 *.jar

@@ -19,6 +19,8 @@ import uk.ewancroft.chronicler.news.BookRenderer
 import uk.ewancroft.chronicler.news.EventStore
 import uk.ewancroft.chronicler.news.Newspaper
 import uk.ewancroft.chronicler.news.NewspaperGenerator
+import uk.ewancroft.chronicler.news.ChronicleEvent
+import uk.ewancroft.chronicler.news.EventType
 import uk.ewancroft.chronicler.news.WebRenderer
 import uk.ewancroft.chronicler.task.HeadlineTicker
 import uk.ewancroft.chronicler.task.PublicationTask
@@ -64,6 +66,7 @@ class Chronicler : JavaPlugin() {
     )
 
     override fun onEnable() {
+        val activationTime = System.currentTimeMillis()
         saveDefaultConfig()
         saveResource("messages.yml", false)
         val cfg = PluginConfig(config)
@@ -71,7 +74,7 @@ class Chronicler : JavaPlugin() {
             Metrics(this, 23467)
         }
         UpdateChecker(this, "ewanc26", "Chronicler").checkAsync()
-        state = buildState()
+        state = buildState(activationTime)
         val s = state ?: return
         logger.info("Chronicler enabled. LLM: ${if (s.llmAvailable) "${s.config.llm.provider} (${s.config.llm.model})" else "template mode"}. Web: ${if (s.config.web.enabled) "port ${s.config.web.port}" else "disabled"}.")
     }
@@ -89,7 +92,7 @@ class Chronicler : JavaPlugin() {
         logger.info("Chronicler disabled.")
     }
 
-    private fun buildState(): PluginState {
+    private fun buildState(activationTime: Long = System.currentTimeMillis()): PluginState {
         val cfg = PluginConfig(config)
         val dataPath = dataFolder.toPath()
         val storeFile = dataPath.resolve("events.json")
@@ -166,6 +169,7 @@ class Chronicler : JavaPlugin() {
             webRenderer = webRenderer,
             archiveStore = archiveStore,
             logger = logger,
+            activationTime = activationTime,
         ).also { it.start() }
 
         server.pluginManager.registerEvents(object : org.bukkit.event.Listener {
@@ -257,6 +261,30 @@ class Chronicler : JavaPlugin() {
 
     fun publishNow() {
         state?.publicationTask?.publishNow()
+    }
+
+    fun recordTestEvent(type: EventType, sender: org.bukkit.command.CommandSender): ChronicleEvent? {
+        val store = state?.eventStore ?: return null
+        val player = sender as? Player
+        val event = ChronicleEvent(
+            type = type,
+            timestamp = System.currentTimeMillis(),
+            playerName = player?.name ?: sender.name,
+            playerUuid = player?.uniqueId?.toString() ?: "",
+            world = player?.world?.name ?: "server",
+            details = mapOf("test" to "true", "source" to "command"),
+        )
+        store.record(event)
+        return event
+    }
+
+    fun previewNextIssue(): Newspaper? {
+        val s = state ?: return null
+        return s.generator.generate(
+            s.publicationTask.getIssueNumber() + 1,
+            s.publicationTask.getLastPublishTime(),
+            System.currentTimeMillis(),
+        )
     }
 
     fun reloadPlugin() {

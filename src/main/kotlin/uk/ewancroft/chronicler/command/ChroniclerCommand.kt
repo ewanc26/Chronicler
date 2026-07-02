@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import uk.ewancroft.chronicler.Chronicler
 import uk.ewancroft.chronicler.config.Messages
 import uk.ewancroft.chronicler.news.BookRenderer
+import uk.ewancroft.chronicler.news.EventType
 import uk.ewancroft.chronicler.tracker.SubscribeStore
 
 class ChroniclerCommand(
@@ -33,6 +34,7 @@ class ChroniclerCommand(
             "stats" -> showStats(sender, args)
             "subscribe" -> toggleSubscribe(sender)
             "archive" -> showArchive(sender, args)
+            "test" -> runTestCommand(sender, args)
             "help" -> { sendHelp(sender); true }
             else -> { sendHelp(sender); true }
         }
@@ -45,7 +47,7 @@ class ChroniclerCommand(
         args: Array<out String>,
     ): List<String> {
         if (args.size == 1) {
-            val cmds = listOf("read", "web", "latest", "reload", "status", "publish", "stats", "subscribe", "archive", "help")
+            val cmds = listOf("read", "web", "latest", "reload", "status", "publish", "stats", "subscribe", "archive", "test", "help")
             return cmds.filter { it.startsWith(args[0], true) }
         }
         if (args[0].lowercase() == "stats" && args.size == 2) {
@@ -54,7 +56,57 @@ class ChroniclerCommand(
         if (args[0].lowercase() == "archive" && args.size == 2) {
             return listOf("list", "read").filter { it.startsWith(args[1], true) }
         }
+        if (args[0].lowercase() == "test" && args.size == 2) {
+            return listOf("event", "events", "preview").filter { it.startsWith(args[1], true) }
+        }
+        if (args[0].lowercase() == "test" && args.getOrNull(1)?.equals("event", true) == true && args.size == 3) {
+            return EventType.entries.map { it.name.lowercase() }.filter { it.startsWith(args[2], true) }
+        }
         return emptyList()
+    }
+
+    private fun runTestCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("chronicler.admin")) {
+            sender.sendMessage(messages.noPermission())
+            return true
+        }
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        when (args.getOrNull(1)?.lowercase()) {
+            "event" -> {
+                val type = args.getOrNull(2)?.let { value ->
+                    EventType.entries.firstOrNull { it.name.equals(value, true) }
+                }
+                if (type == null) {
+                    sender.sendMessage(mm.deserialize("<yellow>Usage: /chronicler test event <type></yellow>"))
+                    return true
+                }
+                val event = plugin.recordTestEvent(type, sender)
+                if (event == null) sender.sendMessage(messages.pluginNotReady())
+                else sender.sendMessage(mm.deserialize("<green>Recorded test event <white>${type.name}</white>.</green>"))
+            }
+            "events" -> {
+                val store = plugin.getEventStore() ?: run {
+                    sender.sendMessage(messages.pluginNotReady())
+                    return true
+                }
+                val limit = args.getOrNull(2)?.toIntOrNull()?.coerceIn(1, 20) ?: 10
+                val events = store.allEvents().takeLast(limit).reversed()
+                sender.sendMessage(mm.deserialize("<gold>Buffered events: <white>${store.allEvents().size}</white></gold>"))
+                events.forEach { event ->
+                    sender.sendMessage(mm.deserialize(" <gray>${event.type.name} — <white>${event.playerName}</white> (${event.world})</gray>"))
+                }
+            }
+            "preview" -> {
+                val issue = plugin.previewNextIssue()
+                if (issue == null) sender.sendMessage(messages.pluginNotReady())
+                else {
+                    val stories = issue.sections.sumOf { it.stories.size }
+                    sender.sendMessage(mm.deserialize("<green>Previewed issue <white>#${issue.issueNumber}</white>: <white>${issue.sections.size}</white> sections, <white>$stories</white> stories. No state was changed.</green>"))
+                }
+            }
+            else -> sender.sendMessage(mm.deserialize("<yellow>Usage: /chronicler test event <type>, events [limit], or preview</yellow>"))
+        }
+        return true
     }
 
     private fun readIssue(sender: CommandSender): Boolean {
@@ -258,6 +310,8 @@ class ChroniclerCommand(
             sender.sendMessage(messages.helpArchiveRead())
             sender.sendMessage(messages.helpReload())
             sender.sendMessage(messages.helpPublish())
+            val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+            sender.sendMessage(mm.deserialize(" <green>/chronicler test</green> <gray>— Event and issue diagnostics</gray>"))
         }
     }
 }

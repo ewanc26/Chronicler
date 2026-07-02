@@ -29,6 +29,7 @@ class PublicationTask(
     private val webRenderer: WebRenderer?,
     private val archiveStore: ArchiveStore?,
     private val logger: Logger,
+    private val activationTime: Long,
 ) {
 
     private var issueNumber = 0
@@ -42,9 +43,10 @@ class PublicationTask(
     fun start() {
         loadState()
 
-        if (issueNumber == 0 && lastPublishTime == 0L && store.allEvents().isNotEmpty()) {
-            logger.info("No prior issues found — publishing issue #0 with ${store.allEvents().size} backlogged events.")
-            doPublish(isIssueZero = true)
+        val backfilledEvents = store.allEvents().count { it.timestamp <= activationTime }
+        if (issueNumber == 0 && lastPublishTime == 0L && backfilledEvents > 0) {
+            logger.info("No prior issues found — publishing issue #0 with $backfilledEvents events through plugin activation.")
+            doPublish(isIssueZero = true, cutoffTime = activationTime)
         }
 
         val schedule = config.schedule
@@ -130,8 +132,8 @@ class PublicationTask(
         }
     }
 
-    private fun doPublish(isIssueZero: Boolean = false) {
-        val toTime = System.currentTimeMillis()
+    private fun doPublish(isIssueZero: Boolean = false, cutoffTime: Long = System.currentTimeMillis()) {
+        val toTime = cutoffTime
         val fromTime = if (isIssueZero) 0L else lastPublishTime
         val number = if (isIssueZero) 0 else issueNumber + 1
 
@@ -156,7 +158,7 @@ class PublicationTask(
             if (!isIssueZero) {
                 issueNumber = number
             }
-            store.clear()
+            store.removeThrough(toTime)
             saveState()
 
             logger.info("Published issue #$number")
