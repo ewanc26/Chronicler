@@ -4,6 +4,7 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bukkit.Bukkit
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
+import uk.ewancroft.chronicler.config.Messages
 import uk.ewancroft.chronicler.config.PluginConfig
 import uk.ewancroft.chronicler.news.ArchiveStore
 import uk.ewancroft.chronicler.news.BookRenderer
@@ -11,6 +12,7 @@ import uk.ewancroft.chronicler.news.EventStore
 import uk.ewancroft.chronicler.news.Newspaper
 import uk.ewancroft.chronicler.news.NewspaperGenerator
 import uk.ewancroft.chronicler.news.WebRenderer
+import uk.ewancroft.chronicler.tracker.SubscribeStore
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Calendar
@@ -20,6 +22,8 @@ class PublicationTask(
     private val plugin: JavaPlugin,
     private val config: PluginConfig,
     private val store: EventStore,
+    private val subscribeStore: SubscribeStore,
+    private val messages: Messages,
     private val generator: NewspaperGenerator,
     private val bookRenderer: BookRenderer,
     private val webRenderer: WebRenderer?,
@@ -85,6 +89,7 @@ class PublicationTask(
         val uuid = player.uniqueId.toString()
         if (uuid in deliveredPlayers) return
         if (latestBook == null) return
+        if (!subscribeStore.isSubscribed(uuid)) return
         giveBook(player, issueNumber)
     }
 
@@ -93,14 +98,10 @@ class PublicationTask(
         val uuid = player.uniqueId.toString()
         val remaining = player.inventory.addItem(book)
         if (remaining.isEmpty()) {
-            player.sendMessage(
-                net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number has arrived in your inventory!")
-            )
+            player.sendMessage(messages.deliveryInventory(config.newspaper.title, number))
         } else {
             player.world.dropItem(player.location, book)
-            player.sendMessage(
-                net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number dropped at your feet (inventory full).")
-            )
+            player.sendMessage(messages.deliveryDrop(config.newspaper.title, number))
         }
         deliveredPlayers.add(uuid)
     }
@@ -144,7 +145,9 @@ class PublicationTask(
             deliveredPlayers.clear()
 
             Bukkit.getOnlinePlayers().forEach { player ->
-                giveBook(player, number)
+                if (subscribeStore.isSubscribed(player.uniqueId.toString())) {
+                    giveBook(player, number)
+                }
             }
 
             webRenderer?.renderAndServe(newspaper)

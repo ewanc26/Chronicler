@@ -1,0 +1,12 @@
+name: Chronicler
+version: '1.0.0'
+main: uk.ewancroft.chronicler.Chronicler
+api-version: '1.21'
+dependencies:
+  server:
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+    Vault:
+      load: BEFORE
+      required: false

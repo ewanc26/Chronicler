@@ -5,6 +5,7 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.command.ChroniclerCommand
 import uk.ewancroft.chronicler.command.ChroniclerExpansion
+import uk.ewancroft.chronicler.config.Messages
 import uk.ewancroft.chronicler.config.PluginConfig
 import uk.ewancroft.chronicler.llm.AnthropicProvider
 import uk.ewancroft.chronicler.llm.LlmProvider
@@ -18,64 +19,96 @@ import uk.ewancroft.chronicler.news.NewspaperGenerator
 import uk.ewancroft.chronicler.news.WebRenderer
 import uk.ewancroft.chronicler.task.HeadlineTicker
 import uk.ewancroft.chronicler.task.PublicationTask
+import uk.ewancroft.chronicler.tracker.BreakingNewsTracker
 import uk.ewancroft.chronicler.tracker.BuildTracker
 import uk.ewancroft.chronicler.tracker.DeathTracker
+import uk.ewancroft.chronicler.tracker.EconomyTracker
 import uk.ewancroft.chronicler.tracker.MilestoneTracker
+import uk.ewancroft.chronicler.tracker.PrivateMessageTracker
 import uk.ewancroft.chronicler.tracker.SessionStore
 import uk.ewancroft.chronicler.tracker.SessionTracker
 import uk.ewancroft.chronicler.tracker.SocialTracker
+import uk.ewancroft.chronicler.tracker.SubscribeStore
+import uk.ewancroft.chronicler.util.UpdateChecker
+import java.io.File
 
 class Chronicler : JavaPlugin() {
 
-    private lateinit var eventStore: EventStore
-    private var llmProvider: LlmProvider? = null
-    private lateinit var generator: NewspaperGenerator
-    private lateinit var bookRenderer: BookRenderer
-    private var webRenderer: WebRenderer? = null
-    private lateinit var publicationTask: PublicationTask
-    private lateinit var command: ChroniclerCommand
-    private var pluginConfig: PluginConfig? = null
-    private var llmAvailable = false
-    private var sessionStore: SessionStore? = null
-    private var archiveStore: ArchiveStore? = null
-    private var headlineTicker: HeadlineTicker? = null
-    private var papiExpansion: ChroniclerExpansion? = null
+    private var state: PluginState? = null
+
+    data class PluginState(
+        val config: PluginConfig,
+        val messages: Messages,
+        val eventStore: EventStore,
+        val sessionStore: SessionStore?,
+        val subscribeStore: SubscribeStore,
+        val archiveStore: ArchiveStore?,
+        val llmProvider: LlmProvider?,
+        val llmAvailable: Boolean,
+        val generator: NewspaperGenerator,
+        val bookRenderer: BookRenderer,
+        val webRenderer: WebRenderer?,
+        val publicationTask: PublicationTask,
+        val headlineTicker: HeadlineTicker?,
+        val papiExpansion: ChroniclerExpansion?,
+        val economyTracker: EconomyTracker?,
+        val command: ChroniclerCommand,
+    )
 
     override fun onEnable() {
         saveDefaultConfig()
+        val cfg = PluginConfig(config)
+        if (cfg.bStatsEnabled) {
+            Metrics(this, 0)
+        }
+        UpdateChecker(this, "ewanc26", "Chronicler").checkAsync()
+        state = buildState()
+        val s = state ?: return
+        logger.info("Chronicler enabled. LLM: ${if (s.llmAvailable) "${s.config.llm.provider} (${s.config.llm.model})" else "template mode"}. Web: ${if (s.config.web.enabled) "port ${s.config.web.port}" else "disabled"}.")
+    }
 
-        Metrics(this, 0)
+    override fun onDisable() {
+        state?.let { s ->
+            s.publicationTask.stop()
+            s.webRenderer?.stop()
+            s.headlineTicker?.stop()
+            s.eventStore.save()
+            s.sessionStore?.save()
+            s.subscribeStore.save()
+        }
+        state = null
+        logger.info("Chronicler disabled.")
+    }
 
-        pluginConfig = PluginConfig(config)
-        val cfg = pluginConfig ?: return
-
+    private fun buildState(): PluginState {
+        val cfg = PluginConfig(config)
         val dataPath = dataFolder.toPath()
         val storeFile = dataPath.resolve("events.json")
         val sessionFile = dataPath.resolve("sessions.json")
+        val subscribeFile = dataPath.resolve("subscriptions.json")
         val archiveDir = dataPath.resolve("archive")
 
-        eventStore = EventStore(storeFile)
-        eventStore.setMaxEvents(cfg.eventLimit)
-        eventStore.load()
+        val messages = Messages(File(dataFolder, "messages.yml")).also { it.load() }
 
-        sessionStore = SessionStore(sessionFile)
-        sessionStore?.load()
-
-        archiveStore = ArchiveStore(archiveDir)
-        archiveStore?.loadAll()
-
-        llmProvider = if (cfg.llm.enabled) {
-            val provider = createProvider(cfg.llm)
-            llmAvailable = provider.isAvailable()
-            if (!llmAvailable) {
-                logger.warning("${provider.name()} is not reachable. Falling back to template mode.")
-            }
-            provider
-        } else {
-            null
+        val eventStore = EventStore(storeFile).also {
+            it.setMaxEvents(cfg.eventLimit)
+            it.load()
         }
 
-        generator = NewspaperGenerator(
+        val sessionStore = SessionStore(sessionFile).also { it.load() }
+        val subscribeStore = SubscribeStore(subscribeFile).also { it.load() }
+        val archiveStore = ArchiveStore(archiveDir).also { it.loadAll() }
+
+        val (llmProvider, llmAvailable) = if (cfg.llm.enabled) {
+            val provider = createProvider(cfg.llm)
+            val available = provider.isAvailable()
+            if (!available) logger.warning("${provider.name()} is not reachable. Falling back to template mode.")
+            provider to available
+        } else {
+            null to false
+        }
+
+        val generator = NewspaperGenerator(
             store = eventStore,
             newspaperConfig = cfg.newspaper,
             llmProvider = llmProvider?.takeIf { llmAvailable },
@@ -83,12 +116,17 @@ class Chronicler : JavaPlugin() {
             logger = logger,
         )
 
-        bookRenderer = BookRenderer(cfg.newspaper)
+        val bookRenderer = BookRenderer(cfg.newspaper)
 
-        if (cfg.web.enabled) {
-            webRenderer = WebRenderer(cfg.web, cfg.newspaper, dataPath.resolve("web"))
+        val webRenderer = if (cfg.web.enabled) {
+            WebRenderer(cfg.web, cfg.newspaper, dataPath.resolve("web"))
         } else {
             logger.info("Web view disabled.")
+            null
+        }
+
+        val economyTracker = EconomyTracker(eventStore, cfg.tracking).also {
+            if (it.tryHook()) logger.info("Vault economy detected.")
         }
 
         val trackers = mutableListOf(
@@ -96,11 +134,25 @@ class Chronicler : JavaPlugin() {
             MilestoneTracker(eventStore, cfg.tracking),
             BuildTracker(eventStore, cfg.tracking),
             SocialTracker(eventStore, cfg.tracking),
+            PrivateMessageTracker(eventStore, cfg.tracking),
+            BreakingNewsTracker(eventStore, cfg),
+            economyTracker,
         )
-        if (sessionStore != null) {
-            trackers.add(SessionTracker(eventStore, sessionStore!!, cfg.tracking))
-        }
+        trackers.add(SessionTracker(eventStore, sessionStore, cfg.tracking))
         trackers.forEach { server.pluginManager.registerEvents(it, this) }
+
+        val publicationTask = PublicationTask(
+            plugin = this,
+            config = cfg,
+            store = eventStore,
+            subscribeStore = subscribeStore,
+            messages = messages,
+            generator = generator,
+            bookRenderer = bookRenderer,
+            webRenderer = webRenderer,
+            archiveStore = archiveStore,
+            logger = logger,
+        ).also { it.start() }
 
         server.pluginManager.registerEvents(object : org.bukkit.event.Listener {
             @org.bukkit.event.EventHandler
@@ -109,27 +161,14 @@ class Chronicler : JavaPlugin() {
             }
         }, this)
 
-        publicationTask = PublicationTask(
-            plugin = this,
-            config = cfg,
-            store = eventStore,
-            generator = generator,
-            bookRenderer = bookRenderer,
-            webRenderer = webRenderer,
-            archiveStore = archiveStore,
-            logger = logger,
-        )
-        publicationTask.start()
-
-        headlineTicker = HeadlineTicker(
+        val headlineTicker = HeadlineTicker(
             plugin = this,
             logger = logger,
             intervalTicks = cfg.tickerInterval,
             getLatestNewspaper = { publicationTask.getLatestNewspaper() },
-        )
-        headlineTicker?.start()
+        ).also { it.start() }
 
-        papiExpansion = if (cfg.papiEnabled) {
+        val papiExpansion = if (cfg.papiEnabled) {
             try {
                 val exp = ChroniclerExpansion(this, sessionStore)
                 exp.register()
@@ -141,94 +180,93 @@ class Chronicler : JavaPlugin() {
             }
         } else null
 
-        command = ChroniclerCommand(this)
-        val cmd = getCommand("chronicler") ?: return
-        cmd.setExecutor(command)
-        cmd.setTabCompleter(command)
-
-        logger.info("Chronicler enabled. LLM: ${if (llmAvailable) "${cfg.llm.provider} (${cfg.llm.model})" else "template mode"}. Web: ${if (cfg.web.enabled) "port ${cfg.web.port}" else "disabled"}.")
-    }
-
-    override fun onDisable() {
-        publicationTask.stop()
-        webRenderer?.stop()
-        headlineTicker?.stop()
-        eventStore.save()
-        sessionStore?.save()
-        pluginConfig = null
-        logger.info("Chronicler disabled.")
-    }
-
-    fun giveNewspaper(player: Player) {
-        val book = publicationTask.getLatestBook()
-        if (book == null) {
-            player.sendMessage(net.kyori.adventure.text.Component.text("No newspaper has been published yet.", net.kyori.adventure.text.format.NamedTextColor.YELLOW))
-            return
+        val command = ChroniclerCommand(this, messages, subscribeStore)
+        getCommand("chronicler")?.let { cmd ->
+            cmd.setExecutor(command)
+            cmd.setTabCompleter(command)
         }
-        if (player.inventory.firstEmpty() == -1) {
-            player.sendMessage(net.kyori.adventure.text.Component.text("Your inventory is full.", net.kyori.adventure.text.format.NamedTextColor.RED))
-            return
-        }
-        player.inventory.addItem(book)
-        player.sendMessage(net.kyori.adventure.text.Component.text("Here's the latest issue!", net.kyori.adventure.text.format.NamedTextColor.GREEN))
-    }
 
-    fun publishNow() {
-        publicationTask.publishNow()
-    }
-
-    fun reloadPlugin() {
-        reloadConfig()
-        pluginConfig = PluginConfig(config)
-        eventStore.setMaxEvents(pluginConfig!!.eventLimit)
-        publicationTask.stop()
-        headlineTicker?.stop()
-        publicationTask = PublicationTask(
-            plugin = this,
-            config = pluginConfig!!,
-            store = eventStore,
+        return PluginState(
+            config = cfg,
+            messages = messages,
+            eventStore = eventStore,
+            sessionStore = sessionStore,
+            subscribeStore = subscribeStore,
+            archiveStore = archiveStore,
+            llmProvider = llmProvider,
+            llmAvailable = llmAvailable,
             generator = generator,
             bookRenderer = bookRenderer,
             webRenderer = webRenderer,
-            archiveStore = archiveStore,
-            logger = logger,
+            publicationTask = publicationTask,
+            headlineTicker = headlineTicker,
+            papiExpansion = papiExpansion,
+            economyTracker = economyTracker,
+            command = command,
         )
-        publicationTask.start()
-        headlineTicker = HeadlineTicker(
-            plugin = this,
-            logger = logger,
-            intervalTicks = pluginConfig!!.tickerInterval,
-            getLatestNewspaper = { publicationTask.getLatestNewspaper() },
-        )
-        headlineTicker?.start()
     }
 
-    fun getWebPort(): Int = pluginConfig?.web?.port ?: 0
+    fun giveNewspaper(player: Player) {
+        val s = state ?: return
+        val book = s.publicationTask.getLatestBook()
+        if (book == null) {
+            player.sendMessage(s.messages.noIssue())
+            return
+        }
+        if (player.inventory.firstEmpty() == -1) {
+            player.sendMessage(s.messages.inventoryFull())
+            return
+        }
+        player.inventory.addItem(book)
+        player.sendMessage(s.messages.delivering())
+    }
 
-    fun getLastPublishTime(): Long = publicationTask.getLastPublishTime()
+    fun publishNow() {
+        state?.publicationTask?.publishNow()
+    }
 
-    fun getLatestNewspaper(): Newspaper? = publicationTask.getLatestNewspaper()
+    fun reloadPlugin() {
+        state?.let { s ->
+            s.publicationTask.stop()
+            s.headlineTicker?.stop()
+            s.eventStore.save()
+            s.sessionStore?.save()
+            s.subscribeStore.save()
+        }
+        reloadConfig()
+        state = buildState()
+    }
 
-    fun getArchiveStore(): ArchiveStore? = archiveStore
+    fun getWebPort(): Int = state?.config?.web?.port ?: 0
 
-    fun getSessionStore(): SessionStore? = sessionStore
+    fun getLastPublishTime(): Long = state?.publicationTask?.getLastPublishTime() ?: 0L
 
-    fun getEventStore(): EventStore = eventStore
+    fun getLatestNewspaper(): Newspaper? = state?.publicationTask?.getLatestNewspaper()
 
-    fun getNewspaperConfig() = pluginConfig?.newspaper
+    fun getArchiveStore(): ArchiveStore? = state?.archiveStore
 
-    fun getBookRenderer(): BookRenderer = bookRenderer
+    fun getSessionStore(): SessionStore? = state?.sessionStore
+
+    fun getEventStore(): EventStore? = state?.eventStore
+
+    fun getNewspaperConfig() = state?.config?.newspaper
+
+    fun getBookRenderer(): BookRenderer? = state?.bookRenderer
+
+    fun getSubscribeStore(): SubscribeStore? = state?.subscribeStore
+
+    fun getEconomyTracker(): EconomyTracker? = state?.economyTracker
 
     fun getStatus(): PluginStatus {
-        val cfg = pluginConfig
+        val s = state
         return PluginStatus(
-            enabled = cfg?.enabled ?: false,
-            schedule = cfg?.schedule ?: "unknown",
-            issueNumber = publicationTask.getIssueNumber(),
-            eventCount = eventStore.allEvents().size,
-            llmAvailable = llmAvailable,
-            webEnabled = cfg?.web?.enabled ?: false,
-            webPort = cfg?.web?.port ?: 0,
+            enabled = s?.config?.enabled ?: false,
+            schedule = s?.config?.schedule ?: "unknown",
+            issueNumber = s?.publicationTask?.getIssueNumber() ?: 0,
+            eventCount = s?.eventStore?.allEvents()?.size ?: 0,
+            llmAvailable = s?.llmAvailable ?: false,
+            webEnabled = s?.config?.web?.enabled ?: false,
+            webPort = s?.config?.web?.port ?: 0,
         )
     }
 

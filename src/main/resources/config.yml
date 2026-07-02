@@ -28,6 +28,9 @@ tracking:
 # Maximum events stored per category before older ones are pruned.
 event-limit: 500
 
+# bStats metrics (anonymous usage statistics).
+bstats-enabled: true
+
 # LLM configuration for article generation.
 # If disabled, falls back to template-based summaries.
 # Providers: ollama, openai (works with OpenRouter, OpenAI, any OpenAI-compatible API), anthropic

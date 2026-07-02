@@ -23,6 +23,9 @@ class NewspaperGenerator(
         sections.addAll(generateAchievements(events))
         sections.addAll(generateHuntingGrounds(events))
         sections.addAll(generateExplorationAndBuilding(events))
+        sections.addAll(generateEconomyAndTrading(events))
+        sections.addAll(generateSocial(events))
+        sections.addAll(generateBreakingNews(events))
         if (newspaperConfig.showStatistics) {
             sections.add(generateStatistics(events))
         }
@@ -34,6 +37,7 @@ class NewspaperGenerator(
         val deathEvents = events.filter { it.type == EventType.DEATH }
         val pvpEvents = events.filter { it.type == EventType.PVP_KILL }
         val advEvents = events.filter { it.type == EventType.ADVANCEMENT }
+        val endEvents = events.filter { it.type == EventType.END_ENTER }
 
         val summary = buildString {
             if (deathEvents.isNotEmpty()) {
@@ -56,11 +60,15 @@ class NewspaperGenerator(
                     appendLine("- \"$adv\" earned by ${evs.size} player(s)")
                 }
             }
+            if (endEvents.isNotEmpty()) {
+                appendLine()
+                appendLine("${endEvents.size} player(s) entered The End for the first time!")
+            }
         }
 
         val stories = generateArticles("Headlines", summary, events, maxStories = 3) ?: run {
             val s = mutableListOf<Story>()
-            if (deathEvents.isEmpty() && pvpEvents.isEmpty() && advEvents.isEmpty()) {
+            if (deathEvents.isEmpty() && pvpEvents.isEmpty() && advEvents.isEmpty() && endEvents.isEmpty()) {
                 s.add(Story("Quiet Days", "No major events to report.", emptyList(), null))
             }
             if (deathEvents.isNotEmpty()) {
@@ -69,6 +77,10 @@ class NewspaperGenerator(
             if (pvpEvents.isNotEmpty()) {
                 val top = pvpEvents.groupBy { it.details["killer"] ?: "unknown" }.maxByOrNull { it.value.size }
                 if (top != null) s.add(Story("PvP Report", "${top.key} leads with ${top.value.size} kills.", listOf(top.key), EventType.PVP_KILL))
+            }
+            if (endEvents.isNotEmpty()) {
+                val players = endEvents.map { it.playerName }.distinct()
+                s.add(Story("Into The End", "${players.size} brave explorer(s) ventured into the End.", players, EventType.END_ENTER))
             }
             s.take(maxStories)
         }
@@ -172,7 +184,8 @@ class NewspaperGenerator(
         val biomeEvents = events.filter { it.type == EventType.BIOME_DISCOVERY }
         val placeEvents = events.filter { it.type == EventType.BLOCK_PLACE }
         val breakEvents = events.filter { it.type == EventType.BLOCK_BREAK }
-        if (biomeEvents.isEmpty() && placeEvents.isEmpty()) return emptyList()
+        val oreEvents = events.filter { it.type == EventType.ORE_DISCOVERY }
+        if (biomeEvents.isEmpty() && placeEvents.isEmpty() && oreEvents.isEmpty()) return emptyList()
 
         val summary = buildString {
             if (biomeEvents.isNotEmpty()) {
@@ -190,13 +203,28 @@ class NewspaperGenerator(
                     appendLine("- $player placed ${places.size} blocks (favorite: ${fav?.key ?: "various"})")
                 }
             }
+            if (oreEvents.isNotEmpty()) {
+                appendLine()
+                appendLine("New ore discoveries (${oreEvents.size} total):")
+                oreEvents.groupBy { it.playerName }.entries.take(3).forEach { (player, ores) ->
+                    val types = ores.mapNotNull { it.details["ore"] }.distinct()
+                    appendLine("- $player discovered: ${types.joinToString(", ")}")
+                }
+            }
         }
 
-        val stories = generateArticles("Exploration & Building", summary, biomeEvents + placeEvents, maxStories = 5) ?: run {
+        val stories = generateArticles("Exploration & Building", summary, biomeEvents + placeEvents + oreEvents, maxStories = 5) ?: run {
             val s = mutableListOf<Story>()
             if (biomeEvents.isNotEmpty()) {
                 val top = biomeEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
                 if (top != null) s.add(Story("Explorer: ${top.key}", "Discovered ${top.value.size} new biome(s)", listOf(top.key), EventType.BIOME_DISCOVERY))
+            }
+            if (oreEvents.isNotEmpty()) {
+                val top = oreEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) {
+                    val types = top.value.mapNotNull { it.details["ore"] }.distinct()
+                    s.add(Story("Prospector: ${top.key}", "Discovered ${types.size} ore type(s): ${types.joinToString(", ")}", listOf(top.key), EventType.ORE_DISCOVERY))
+                }
             }
             if (placeEvents.isNotEmpty()) {
                 val top = placeEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
@@ -206,6 +234,70 @@ class NewspaperGenerator(
         }
 
         return listOf(NewspaperSection("Exploration & Building", stories))
+    }
+
+    private fun generateEconomyAndTrading(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val tradeEvents = events.filter { it.type == EventType.TRADE }
+        if (tradeEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            appendLine("Economic activity (${tradeEvents.size} transactions):")
+            tradeEvents.groupBy { it.playerName }.entries.sortedByDescending { it.value.size }.take(3).forEach { (player, trades) ->
+                val total = trades.mapNotNull { it.details["amount"]?.toDoubleOrNull() }.sum()
+                appendLine("- $player: ${trades.size} transactions (total: ${String.format("%.2f", total)})")
+            }
+        }
+
+        val stories = generateArticles("Economy & Trading", summary, tradeEvents, maxStories = 3) ?: run {
+            val s = mutableListOf<Story>()
+            val byPlayer = tradeEvents.groupBy { it.playerName }
+            val topTrader = byPlayer.maxByOrNull { it.value.size }
+            if (topTrader != null) {
+                val total = topTrader.value.mapNotNull { it.details["amount"]?.toDoubleOrNull() }.sum()
+                s.add(Story("Top Trader: ${topTrader.key}", "${topTrader.value.size} transactions (total: ${String.format("%.2f", total)})", listOf(topTrader.key), EventType.TRADE))
+            }
+            val totals = tradeEvents.mapNotNull { it.details["amount"]?.toDoubleOrNull() }
+            if (totals.isNotEmpty()) {
+                s.add(Story("Market Activity", "${tradeEvents.size} transactions totaling ${String.format("%.2f", totals.sum())}", emptyList(), EventType.TRADE))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Economy & Trading", stories))
+    }
+
+    private fun generateSocial(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val msgEvents = events.filter { it.type == EventType.MESSAGE_SENT }
+        if (msgEvents.isEmpty()) return emptyList()
+
+        val totalMessages = msgEvents.size
+        val byPlayer = msgEvents.groupBy { it.playerName }
+        val topChatter = byPlayer.maxByOrNull { it.value.size }
+
+        val stories = mutableListOf<Story>()
+        stories.add(Story("Messages Sent", "$totalMessages private messages were sent this cycle.", emptyList(), EventType.MESSAGE_SENT))
+        if (topChatter != null) {
+            stories.add(Story("Most Social: ${topChatter.key}", "${topChatter.value.size} private messages sent.", listOf(topChatter.key), EventType.MESSAGE_SENT))
+        }
+
+        return listOf(NewspaperSection("Social", stories.take(maxStories)))
+    }
+
+    private fun generateBreakingNews(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val endEvents = events.filter { it.type == EventType.END_ENTER }
+        if (endEvents.isEmpty()) return emptyList()
+
+        val players = endEvents.map { it.playerName }.distinct()
+        val stories = listOf(
+            Story(
+                "Breaking: Adventurers Reach The End",
+                "In a monumental achievement, ${players.size} player(s) ventured into The End dimension for the first time. The expedition was led by ${players.firstOrNull() ?: "unknown"}.",
+                players,
+                EventType.END_ENTER,
+            )
+        )
+
+        return listOf(NewspaperSection("Breaking News", stories))
     }
 
     private fun generateStatistics(events: List<ChronicleEvent>): NewspaperSection {

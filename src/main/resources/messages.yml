@@ -1,0 +1,53 @@
+# Chronicler messages
+prefix: "<gold>[Chronicler]</gold>"
+
+general:
+  no-permission: "<red>You do not have permission.</red>"
+  player-only: "<red>Only players can use this command.</red>"
+  plugin-not-ready: "<red>Plugin not ready.</red>"
+  player-not-found: "<red>Player not found.</red>"
+  inventory-full: "<red>Your inventory is full.</red>"
+
+command:
+  help-header: "<gold>Chronicler Commands:</gold>"
+  help-read: " <green>/chronicler read</green> <gray>— Get the latest newspaper</gray>"
+  help-web: " <green>/chronicler web</green> <gray>— Show web URL</gray>"
+  help-status: " <green>/chronicler status</green> <gray>— Show plugin status</gray>"
+  help-stats: " <green>/chronicler stats <player></green> <gray>— View player stats</gray>"
+  help-subscribe: " <green>/chronicler subscribe</green> <gray>— Toggle auto-delivery</gray>"
+  help-archive-list: " <green>/chronicler archive list</green> <gray>— List past issues</gray>"
+  help-archive-read: " <green>/chronicler archive read <#></green> <gray>— Read an old issue</gray>"
+  help-reload: " <green>/chronicler reload</green> <gray>— Reload config</gray>"
+  help-publish: " <green>/chronicler publish</green> <gray>— Publish now</gray>"
+  help-usage: "<yellow>Usage: /chronicler stats <player></yellow>"
+  archive-usage: "<yellow>Usage: /chronicler archive list or /chronicler archive read <#></yellow>"
+  archive-empty: "<yellow>No archived issues yet.</yellow>"
+  archive-not-found: "<red>Issue #%s not found.</red>"
+  archive-dropped: "<yellow>Issue #%s dropped at your feet (inventory full).</yellow>"
+  archive-here: "<green>Here's issue #%s!</green>"
+
+read:
+  no-issue: "<yellow>No newspaper has been published yet.</yellow>"
+  delivering: "<green>Here's the latest issue!</green>"
+
+web:
+  disabled: "<yellow>Web server is not enabled.</yellow>"
+  url: "<aqua>Newspaper web view: http://localhost:%d</aqua>"
+  url-hint: "<gray>(Replace localhost with your server address.)</gray>"
+
+reload:
+  done: "<green>Chronicler reloaded.</green>"
+
+publish:
+  done: "<green>Publishing newspaper...</green>"
+
+delivery:
+  inventory: "<gold>[Chronicler]</gold> <yellow>%s #%s has arrived in your inventory!</yellow>"
+  drop: "<gold>[Chronicler]</gold> <yellow>%s #%s dropped at your feet (inventory full).</yellow>"
+
+subscribe:
+  enabled: "<green>You will now receive newspapers automatically.</green>"
+  disabled: "<red>You will no longer receive newspapers automatically.</red>"
+
+breaking-news:
+  the-end: "<gold><bold>BREAKING NEWS:</bold></gold> <yellow>A player has entered the End!</yellow>"

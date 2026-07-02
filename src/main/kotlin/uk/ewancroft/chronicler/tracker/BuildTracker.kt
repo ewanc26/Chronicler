@@ -6,7 +6,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.player.PlayerMoveEvent
-import org.bukkit.block.Biome
 import uk.ewancroft.chronicler.config.TrackingConfig
 import uk.ewancroft.chronicler.news.ChronicleEvent
 import uk.ewancroft.chronicler.news.EventStore
@@ -19,6 +18,23 @@ class BuildTracker(
 ) : Listener {
 
     private val knownBiomes = mutableMapOf<UUID, MutableSet<String>>()
+    private val knownOres = mutableMapOf<UUID, MutableSet<String>>()
+    private val lastPos = mutableMapOf<UUID, Pair<Double, Double>>()
+    private var distanceCounter = 0
+
+    private val oreMaterials = setOf(
+        Material.COAL_ORE, Material.DEEPSLATE_COAL_ORE,
+        Material.IRON_ORE, Material.DEEPSLATE_IRON_ORE,
+        Material.COPPER_ORE, Material.DEEPSLATE_COPPER_ORE,
+        Material.GOLD_ORE, Material.DEEPSLATE_GOLD_ORE,
+        Material.REDSTONE_ORE, Material.DEEPSLATE_REDSTONE_ORE,
+        Material.LAPIS_ORE, Material.DEEPSLATE_LAPIS_ORE,
+        Material.DIAMOND_ORE, Material.DEEPSLATE_DIAMOND_ORE,
+        Material.EMERALD_ORE, Material.DEEPSLATE_EMERALD_ORE,
+        Material.NETHER_GOLD_ORE, Material.NETHER_QUARTZ_ORE,
+        Material.ANCIENT_DEBRIS,
+    )
+
     private val naturalBlocks = setOf(
         Material.STONE, Material.DIRT, Material.GRASS_BLOCK, Material.COBBLESTONE,
         Material.ANDESITE, Material.DIORITE, Material.GRANITE, Material.DEEPSLATE,
@@ -70,32 +86,81 @@ class BuildTracker(
 
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
-        if (!tracking.blocks) return
         val block = event.block
-        if (block.type in naturalBlocks) return
         val player = event.player
-        store.record(
-            ChronicleEvent(
-                type = EventType.BLOCK_BREAK,
-                timestamp = System.currentTimeMillis(),
-                playerName = player.name,
-                playerUuid = player.uniqueId.toString(),
-                world = player.world.name,
-                details = mapOf(
-                    "block" to block.type.name.lowercase(),
-                    "x" to block.x.toString(),
-                    "z" to block.z.toString(),
-                ),
+        val blockType = block.type
+
+        if (tracking.blocks && blockType !in naturalBlocks) {
+            store.record(
+                ChronicleEvent(
+                    type = EventType.BLOCK_BREAK,
+                    timestamp = System.currentTimeMillis(),
+                    playerName = player.name,
+                    playerUuid = player.uniqueId.toString(),
+                    world = player.world.name,
+                    details = mapOf(
+                        "block" to blockType.name.lowercase(),
+                        "x" to block.x.toString(),
+                        "z" to block.z.toString(),
+                    ),
+                )
             )
-        )
+        }
+
+        if (tracking.exploration && blockType in oreMaterials) {
+            val uuid = player.uniqueId
+            val ores = knownOres.getOrPut(uuid) { mutableSetOf() }
+            val oreName = blockType.name.lowercase().removeSuffix("_ore")
+            if (oreName !in ores) {
+                ores.add(oreName)
+                store.record(
+                    ChronicleEvent(
+                        type = EventType.ORE_DISCOVERY,
+                        timestamp = System.currentTimeMillis(),
+                        playerName = player.name,
+                        playerUuid = uuid.toString(),
+                        world = player.world.name,
+                        details = mapOf("ore" to oreName, "block" to blockType.name.lowercase()),
+                    )
+                )
+            }
+        }
     }
 
     @EventHandler
     fun onPlayerMove(event: PlayerMoveEvent) {
         if (!tracking.exploration) return
         val player = event.player
+        val uuid = player.uniqueId
         val to = event.to
-        val biomes = knownBiomes.getOrPut(player.uniqueId) { mutableSetOf() }
+
+        val toX = to.blockX
+        val toZ = to.blockZ
+        val prev = lastPos[uuid]
+        if (prev != null) {
+            val dx = toX - prev.first
+            val dz = toZ - prev.second
+            val dist = kotlin.math.sqrt(dx * dx + dz * dz)
+            if (dist > 0.0) {
+                distanceCounter++
+                if (distanceCounter >= 100) {
+                    distanceCounter = 0
+                    store.record(
+                        ChronicleEvent(
+                            type = EventType.DISTANCE_MILESTONE,
+                            timestamp = System.currentTimeMillis(),
+                            playerName = player.name,
+                            playerUuid = uuid.toString(),
+                            world = player.world.name,
+                            details = mapOf("dist" to dist.toInt().toString()),
+                        )
+                    )
+                }
+            }
+        }
+        lastPos[uuid] = toX.toDouble() to toZ.toDouble()
+
+        val biomes = knownBiomes.getOrPut(uuid) { mutableSetOf() }
         val biome = player.world.getBiome(to.blockX, to.blockY, to.blockZ)
         val biomeName = biome.key.toString().substringAfter(':')
 
@@ -107,7 +172,7 @@ class BuildTracker(
                         type = EventType.BIOME_DISCOVERY,
                         timestamp = System.currentTimeMillis(),
                         playerName = player.name,
-                        playerUuid = player.uniqueId.toString(),
+                        playerUuid = uuid.toString(),
                         world = player.world.name,
                         details = mapOf("biome" to biomeName),
                     )

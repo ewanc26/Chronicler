@@ -21,6 +21,10 @@ enum class EventType {
     SESSION_END,
     MILESTONE_LOGIN_STREAK,
     MILESTONE_PLAYTIME,
+    MESSAGE_SENT,
+    ORE_DISCOVERY,
+    DISTANCE_MILESTONE,
+    END_ENTER,
 }
 
 @Serializable

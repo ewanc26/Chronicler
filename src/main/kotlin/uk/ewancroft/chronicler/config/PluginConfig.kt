@@ -51,6 +51,7 @@ class PluginConfig(private val config: FileConfiguration) {
     val configVersion: Int
     val tickerInterval: Long
     val papiEnabled: Boolean
+    val bStatsEnabled: Boolean
 
     init {
         enabled = config.getBoolean("enabled", true)
@@ -91,6 +92,7 @@ class PluginConfig(private val config: FileConfiguration) {
             port = config.getInt("web.port", 8080).coerceIn(1024, 65535),
             writeFiles = config.getBoolean("web.write-files", true),
         )
+        bStatsEnabled = config.getBoolean("bstats-enabled", true)
         configVersion = config.getInt("config-version", 1)
         migrateConfig()
     }
