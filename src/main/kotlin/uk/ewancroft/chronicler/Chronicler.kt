@@ -1,6 +1,8 @@
 package uk.ewancroft.chronicler
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bstats.bukkit.Metrics
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.command.ChroniclerCommand
@@ -181,9 +183,18 @@ class Chronicler : JavaPlugin() {
         } else null
 
         val command = ChroniclerCommand(this, messages, subscribeStore)
-        getCommand("chronicler")?.let { cmd ->
-            cmd.setExecutor(command)
-            cmd.setTabCompleter(command)
+        try {
+            getCommand("chronicler")?.let { cmd ->
+                cmd.setExecutor(command)
+                cmd.setTabCompleter(command)
+            }
+        } catch (_: UnsupportedOperationException) {
+            Bukkit.getGlobalRegionScheduler().run(this) { _ ->
+                getCommand("chronicler")?.let { cmd ->
+                    cmd.setExecutor(command)
+                    cmd.setTabCompleter(command)
+                }
+            }
         }
 
         return PluginState(
