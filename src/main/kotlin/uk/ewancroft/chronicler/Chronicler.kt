@@ -68,7 +68,10 @@ class Chronicler : JavaPlugin() {
     override fun onEnable() {
         val activationTime = System.currentTimeMillis()
         saveDefaultConfig()
-        saveResource("messages.yml", false)
+        val messagesFile = File(dataFolder, "messages.yml")
+        if (!messagesFile.exists()) {
+            saveResource("messages.yml", false)
+        }
         val cfg = PluginConfig(config)
         if (cfg.bStatsEnabled) {
             Metrics(this, 23467)
