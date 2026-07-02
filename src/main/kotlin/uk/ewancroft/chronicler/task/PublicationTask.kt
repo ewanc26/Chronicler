@@ -104,9 +104,17 @@ class PublicationTask(
             latestBook = book
 
             Bukkit.getOnlinePlayers().forEach { player ->
-                player.sendMessage(
-                    net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$issueNumber has been published! Read it with §a/chronicler read")
-                )
+                val remaining = player.inventory.addItem(book.clone())
+                if (remaining.isEmpty()) {
+                    player.sendMessage(
+                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$issueNumber has arrived in your inventory!")
+                    )
+                } else {
+                    player.world.dropItem(player.location, book.clone())
+                    player.sendMessage(
+                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$issueNumber dropped at your feet (inventory full).")
+                    )
+                }
             }
 
             webRenderer?.renderAndServe(newspaper)
