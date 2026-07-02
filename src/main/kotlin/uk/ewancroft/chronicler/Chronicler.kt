@@ -73,7 +73,7 @@ class Chronicler : JavaPlugin() {
         if (cfg.bStatsEnabled) {
             Metrics(this, 23467)
         }
-        UpdateChecker(this, "ewanc26", "Chronicler").checkAsync()
+        UpdateChecker(this, "ewanc26", "Chronicler", cfg.autoUpdateEnabled).checkAsync()
         state = buildState(activationTime)
         val s = state ?: return
         logger.info("Chronicler enabled. LLM: ${if (s.llmAvailable) "${s.config.llm.provider} (${s.config.llm.model})" else "template mode"}. Web: ${if (s.config.web.enabled) "port ${s.config.web.port}" else "disabled"}.")

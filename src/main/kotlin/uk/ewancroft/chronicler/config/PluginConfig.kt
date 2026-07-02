@@ -66,6 +66,7 @@ class PluginConfig(private val config: FileConfiguration) {
     val tickerInterval: Long
     val papiEnabled: Boolean
     val bStatsEnabled: Boolean
+    val autoUpdateEnabled: Boolean
 
     init {
         enabled = config.getBoolean("enabled", true)
@@ -121,6 +122,7 @@ class PluginConfig(private val config: FileConfiguration) {
             writeFiles = config.getBoolean("web.write-files", true),
         )
         bStatsEnabled = config.getBoolean("bstats-enabled", true)
+        autoUpdateEnabled = config.getBoolean("auto-update.enabled", true)
         configVersion = config.getInt("config-version", 1)
         migrateConfig()
     }

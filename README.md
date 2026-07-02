@@ -34,7 +34,7 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 
 ## Installation
 
-1. Download the latest `Chronicler-1.2.5-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
+1. Download the latest `Chronicler-1.3.0-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
 2. Place the jar in your server's `plugins/` folder
 3. Restart the server
 4. Edit `plugins/Chronicler/config.yml` to your liking
@@ -131,7 +131,7 @@ cd Chronicler
 ./gradlew build
 ```
 
-The compiled jar will be at `build/libs/Chronicler-1.2.5-all.jar`.
+The compiled jar will be at `build/libs/Chronicler-1.3.0-all.jar`.
 
 ## Testing
 
