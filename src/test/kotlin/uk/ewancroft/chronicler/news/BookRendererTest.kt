@@ -114,4 +114,25 @@ class BookRendererTest {
         val meta = book.itemMeta as BookMeta
         assertEquals(7, meta.pageCount, "Should be 1 title + 5 sections + 1 footer")
     }
+
+    @Test
+    fun `renderToBook gives each article a complete page`() {
+        val newspaper = Newspaper(
+            issueNumber = 1,
+            fromTime = 0L,
+            toTime = 1000L,
+            sections = listOf(
+                NewspaperSection(
+                    "Local News",
+                    listOf(
+                        Story("First", "First article.", emptyList(), null),
+                        Story("Second", "Second article.", emptyList(), null),
+                    ),
+                ),
+            ),
+        )
+        val meta = BookRenderer(config).renderToBook(newspaper).itemMeta as BookMeta
+
+        assertEquals(4, meta.pageCount, "Should be title + one page per article + footer")
+    }
 }

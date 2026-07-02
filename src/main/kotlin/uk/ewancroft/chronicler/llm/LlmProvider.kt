@@ -10,12 +10,14 @@ interface LlmProvider {
 
 fun buildPrompt(sectionTitle: String, eventSummary: String): String {
     return buildString {
-        appendLine("Write a newspaper article for the \"$sectionTitle\" section based on these events:")
+        appendLine("Write a complete newspaper article for the \"$sectionTitle\" section based only on these events:")
         appendLine()
         append(eventSummary)
         appendLine()
         appendLine()
-        append("Respond with ---HEADLINE followed by the headline, then ---BODY followed by the article body.")
+        appendLine("Use an inverted-pyramid structure: open with a strong lead covering the most important who, what, and outcome; follow with specific supporting facts and context.")
+        appendLine("Write 2-4 complete sentences in third person. Do not use bullet points, labels, markdown, invented quotes, or facts absent from the event summary.")
+        append("Respond with ---HEADLINE followed by a concise news headline, then ---BODY followed by the article body.")
     }
 }
 

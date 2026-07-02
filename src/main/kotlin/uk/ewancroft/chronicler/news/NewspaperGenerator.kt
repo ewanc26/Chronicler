@@ -16,6 +16,7 @@ class NewspaperGenerator(
 
     fun generate(issueNumber: Int, fromTime: Long, toTime: Long): Newspaper {
         val events = store.eventsSince(fromTime).filter { it.timestamp <= toTime }
+        logger.info("Generating issue #$issueNumber from ${events.size} events ($fromTime to $toTime).")
         val sections = mutableListOf<NewspaperSection>()
 
         sections.addAll(generateHeadlines(events))
@@ -36,7 +37,11 @@ class NewspaperGenerator(
             sections.add(generateStatistics(events))
         }
 
-        return Newspaper(issueNumber, fromTime, toTime, sections)
+        val structuredSections = sections.map { section ->
+            section.copy(stories = section.stories.map(::structureStory))
+        }
+        logger.info("Generated issue #$issueNumber with ${structuredSections.size} sections and ${structuredSections.sumOf { it.stories.size }} stories.")
+        return Newspaper(issueNumber, fromTime, toTime, structuredSections)
     }
 
     private fun generateHeadlines(events: List<ChronicleEvent>): List<NewspaperSection> {
@@ -741,21 +746,29 @@ class NewspaperGenerator(
     ): List<Story>? {
         if (!llmEnabled || llmProvider == null || summary.isBlank()) return null
 
-        val systemPrompt = llmProvider.let {
-            "You are the editor of a Minecraft server newspaper. Write concise, vivid articles about in-game events. Use a dry, slightly humorous tone.\n\nEach response must be exactly:\n---HEADLINE\n(headline, max 60 chars)\n---BODY\n(2-4 sentence article body)"
-        }
+        val systemPrompt = "You are the editor of a Minecraft server newspaper. Write accurate, concise news copy in an inverted-pyramid structure with a factual lead and supporting detail. Use a dry, slightly humorous tone, but never invent facts or quotes.\n\nEach response must be exactly:\n---HEADLINE\n(headline, max 60 chars)\n---BODY\n(2-4 complete sentences)"
 
         return try {
+            logger.fine("Requesting LLM article for section '$sectionTitle' from ${events.size} events.")
             val result = llmProvider.generate(systemPrompt, sectionTitle, summary)
             if (result != null) {
                 val players = events.map { it.playerName }.distinct()
                 val types = events.map { it.type }.distinct()
                 listOf(Story(result.headline, result.body, players, types.firstOrNull()))
             } else {
+                logger.warning("LLM returned no usable article for '$sectionTitle'; using template copy.")
                 null
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.warning("LLM article generation failed for '$sectionTitle': ${e.message}; using template copy.")
             null
         }
+    }
+
+    private fun structureStory(story: Story): Story {
+        val headline = story.headline.trim().replace(Regex("[\\r\\n]+"), " ").take(60).ifBlank { "News Brief" }
+        val body = story.body.trim().replace(Regex("\\s+"), " ").ifBlank { "No further details were available at press time." }
+        val completeBody = if (body.last() in ".!?") body else "$body."
+        return story.copy(headline = headline, body = completeBody)
     }
 }

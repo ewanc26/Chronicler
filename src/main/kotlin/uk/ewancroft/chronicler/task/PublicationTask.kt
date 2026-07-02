@@ -16,6 +16,7 @@ import uk.ewancroft.chronicler.tracker.SubscribeStore
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Calendar
+import java.util.logging.Level
 import java.util.logging.Logger
 
 class PublicationTask(
@@ -73,6 +74,7 @@ class PublicationTask(
     }
 
     fun stop() {
+        logger.info("Stopping publication task at issue #$issueNumber.")
         scheduledTask?.cancel()
         scheduledTask = null
         saveState()
@@ -136,23 +138,33 @@ class PublicationTask(
         val toTime = cutoffTime
         val fromTime = if (isIssueZero) 0L else lastPublishTime
         val number = if (isIssueZero) 0 else issueNumber + 1
+        val eventCount = store.eventsSince(fromTime).count { it.timestamp <= toTime }
+        val startedAt = System.currentTimeMillis()
 
         try {
+            logger.info("Starting publication of issue #$number with $eventCount events ($fromTime to $toTime).")
             val newspaper = generator.generate(number, fromTime, toTime)
             val book = bookRenderer.renderToBook(newspaper)
+            val storyCount = newspaper.sections.sumOf { it.stories.size }
+            logger.info("Rendered issue #$number: ${newspaper.sections.size} sections, $storyCount stories, ${book.itemMeta.let { it as org.bukkit.inventory.meta.BookMeta }.pageCount} book pages.")
 
             latestNewspaper = newspaper
             latestBook = book
             archiveStore?.archive(newspaper)
+            if (archiveStore != null) logger.info("Archived issue #$number.")
             deliveredPlayers.clear()
 
+            var delivered = 0
             Bukkit.getOnlinePlayers().forEach { player ->
                 if (subscribeStore.isSubscribed(player.uniqueId.toString())) {
                     giveBook(player, number)
+                    delivered++
                 }
             }
+            logger.info("Delivered issue #$number to $delivered online subscriber(s).")
 
             webRenderer?.renderAndServe(newspaper)
+            if (webRenderer != null) logger.info("Rendered web edition for issue #$number.")
 
             lastPublishTime = toTime
             if (!isIssueZero) {
@@ -161,9 +173,9 @@ class PublicationTask(
             store.removeThrough(toTime)
             saveState()
 
-            logger.info("Published issue #$number")
+            logger.info("Published issue #$number in ${System.currentTimeMillis() - startedAt}ms; consumed $eventCount events.")
         } catch (e: Exception) {
-            logger.warning("Failed to publish issue #$number: ${e.message}")
+            logger.log(Level.SEVERE, "Failed to publish issue #$number after ${System.currentTimeMillis() - startedAt}ms.", e)
         }
     }
 
@@ -177,7 +189,8 @@ class PublicationTask(
                     lastPublishTime = lines[1].toLongOrNull() ?: System.currentTimeMillis()
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.log(Level.WARNING, "Failed to load publication state from $stateFile; starting from issue zero.", e)
             lastPublishTime = 0L
         }
     }
@@ -186,7 +199,8 @@ class PublicationTask(
         try {
             Files.createDirectories(stateFile.parent)
             Files.writeString(stateFile, "$issueNumber\n$lastPublishTime")
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.log(Level.SEVERE, "Failed to save publication state to $stateFile.", e)
         }
     }
 

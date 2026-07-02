@@ -46,22 +46,19 @@ class BookRenderer(
         pages.add(titlePage)
 
         for (section in newspaper.sections) {
-            val page = Component.text()
-            page.append(Component.text("\n${section.title}\n", ACCENT, TextDecoration.BOLD))
-            page.append(Component.text("${"=".repeat(Math.min(section.title.length, 20))}\n\n", MUTED_TEXT))
-
-            for ((i, story) in section.stories.withIndex()) {
-                page.append(Component.text("${i + 1}. ", ACCENT))
+            for (story in section.stories) {
+                val page = Component.text()
+                page.append(Component.text("${section.title.uppercase()}\n", ACCENT, TextDecoration.BOLD))
+                page.append(Component.text("${"=".repeat(Math.min(section.title.length, 20))}\n\n", MUTED_TEXT))
                 page.append(Component.text("${story.headline}\n", PRIMARY_TEXT, TextDecoration.BOLD))
+                page.append(Component.text("By ${story.byline}\n", MUTED_TEXT, TextDecoration.ITALIC))
+                page.append(Component.newline())
                 page.append(Component.text("${story.body}\n", SECONDARY_TEXT))
                 if (story.players.isNotEmpty()) {
-                    page.append(Component.text("  — ${story.players.joinToString(", ")}\n", MUTED_TEXT))
+                    page.append(Component.text("Filed under: ${story.players.joinToString(", ")}\n", MUTED_TEXT))
                 }
-                if (i < section.stories.size - 1) {
-                    page.append(Component.newline())
-                }
+                pages.add(page.build())
             }
-            pages.add(page.build())
         }
 
         val now = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date())

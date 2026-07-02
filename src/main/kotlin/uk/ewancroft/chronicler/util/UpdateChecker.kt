@@ -19,11 +19,15 @@ class UpdateChecker(
 ) {
 
     fun checkAsync() {
+        plugin.logger.info("Checking GitHub Releases for updates (current: ${plugin.pluginMeta.version}, auto-update: $autoUpdate).")
         plugin.server.scheduler.runTaskAsynchronously(plugin, Runnable {
             try {
                 val release = fetchLatestRelease() ?: return@Runnable
                 val current = plugin.pluginMeta.version
-                if (!isNewerVersion(release.version, current)) return@Runnable
+                if (!isNewerVersion(release.version, current)) {
+                    plugin.logger.info("$repoName is up to date (version $current).")
+                    return@Runnable
+                }
 
                 if (!autoUpdate) {
                     logOnMainThread("A new version of $repoName is available: ${release.version} (current: $current). Download at ${release.pageUrl}")
@@ -40,6 +44,7 @@ class UpdateChecker(
                 val updateDirectory = plugin.server.updateFolderFile.toPath()
                 Files.createDirectories(updateDirectory)
                 val destination = updateDirectory.resolve("$repoName.jar")
+                plugin.logger.info("Downloading $repoName ${release.version} from asset ${asset.name}.")
                 val temporary = Files.createTempFile(updateDirectory, "$repoName-", ".download")
                 try {
                     download(asset.downloadUrl, temporary)

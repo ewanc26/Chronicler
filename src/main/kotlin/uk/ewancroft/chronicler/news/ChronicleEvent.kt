@@ -102,4 +102,5 @@ data class Story(
     val body: String,
     val players: List<String>,
     val eventType: EventType?,
+    val byline: String = "Chronicler Staff",
 )

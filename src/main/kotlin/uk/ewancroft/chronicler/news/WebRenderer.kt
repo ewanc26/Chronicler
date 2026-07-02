@@ -57,11 +57,12 @@ class WebRenderer(
                 } else ""
 
                 """
-                <div class="story">
+                <article class="story">
                     <h3>${escapeHtml(story.headline)}</h3>
+                    <p class="byline">By ${escapeHtml(story.byline)}</p>
                     <p>${escapeHtml(story.body)}</p>
                     $playersHtml
-                </div>
+                </article>
                 """
             }
 
@@ -197,6 +198,12 @@ class WebRenderer(
         .story p {
             color: var(--text-secondary);
             font-size: 0.95rem;
+        }
+        .story .byline {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-style: italic;
+            margin-bottom: 0.5rem;
         }
         .story .players {
             color: var(--text-muted);
