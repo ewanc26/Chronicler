@@ -102,6 +102,13 @@ class Chronicler : JavaPlugin() {
         }
         trackers.forEach { server.pluginManager.registerEvents(it, this) }
 
+        server.pluginManager.registerEvents(object : org.bukkit.event.Listener {
+            @org.bukkit.event.EventHandler
+            fun onJoin(event: org.bukkit.event.player.PlayerJoinEvent) {
+                publicationTask.deliverToPlayer(event.player)
+            }
+        }, this)
+
         publicationTask = PublicationTask(
             plugin = this,
             config = cfg,

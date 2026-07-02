@@ -33,6 +33,7 @@ class PublicationTask(
     private var latestNewspaper: Newspaper? = null
     private var scheduledTask: ScheduledTask? = null
     private val stateFile: Path = plugin.dataFolder.toPath().resolve("publish-state.json")
+    private val deliveredPlayers = mutableSetOf<String>()
 
     fun start() {
         loadState()
@@ -80,6 +81,30 @@ class PublicationTask(
     fun getLatestBook(): ItemStack? = latestBook?.clone()
     fun getLatestNewspaper(): Newspaper? = latestNewspaper
 
+    fun deliverToPlayer(player: org.bukkit.entity.Player) {
+        val uuid = player.uniqueId.toString()
+        if (uuid in deliveredPlayers) return
+        if (latestBook == null) return
+        giveBook(player, issueNumber)
+    }
+
+    private fun giveBook(player: org.bukkit.entity.Player, number: Int) {
+        val book = latestBook?.clone() ?: return
+        val uuid = player.uniqueId.toString()
+        val remaining = player.inventory.addItem(book)
+        if (remaining.isEmpty()) {
+            player.sendMessage(
+                net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number has arrived in your inventory!")
+            )
+        } else {
+            player.world.dropItem(player.location, book)
+            player.sendMessage(
+                net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number dropped at your feet (inventory full).")
+            )
+        }
+        deliveredPlayers.add(uuid)
+    }
+
     private fun checkAndPublish() {
         if (!config.enabled) return
 
@@ -116,19 +141,10 @@ class PublicationTask(
             latestNewspaper = newspaper
             latestBook = book
             archiveStore?.archive(newspaper)
+            deliveredPlayers.clear()
 
             Bukkit.getOnlinePlayers().forEach { player ->
-                val remaining = player.inventory.addItem(book.clone())
-                if (remaining.isEmpty()) {
-                    player.sendMessage(
-                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number has arrived in your inventory!")
-                    )
-                } else {
-                    player.world.dropItem(player.location, book.clone())
-                    player.sendMessage(
-                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number dropped at your feet (inventory full).")
-                    )
-                }
+                giveBook(player, number)
             }
 
             webRenderer?.renderAndServe(newspaper)
