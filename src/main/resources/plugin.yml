@@ -4,3 +4,17 @@ main: uk.ewancroft.chronicler.Chronicler
 api-version: '1.21'
 description: Tracks server events and generates a dynamic newspaper.
 author: ewanc26
+
+commands:
+  chronicler:
+    description: Chronicler commands.
+    aliases: [clr]
+    permission: chronicler.use
+
+permissions:
+  chronicler.use:
+    description: Read the newspaper.
+    default: true
+  chronicler.admin:
+    description: Admin commands for Chronicler.
+    default: op

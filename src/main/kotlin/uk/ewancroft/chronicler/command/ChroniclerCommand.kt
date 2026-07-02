@@ -102,13 +102,14 @@ class ChroniclerCommand(
             return true
         }
         val status = plugin.getStatus()
-        sender.sendMessage(net.kyori.adventure.text.Component.text("§6Chronicler §7v${plugin.pluginMeta.version}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Enabled: §f${status.enabled}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Schedule: §f${status.schedule}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Issue: §f#${status.issueNumber}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Events stored: §f${status.eventCount}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7LLM: §f${if (status.llmAvailable) "§aonline" else "§coffline/disabled"}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Web: §f${if (status.webEnabled) "§a:${status.webPort}" else "§cdisabled"}"))
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        sender.sendMessage(mm.deserialize("<gold>Chronicler <gray>v${plugin.pluginMeta.version}</gray></gold>"))
+        sender.sendMessage(mm.deserialize(" <gray>Enabled: <white>${status.enabled}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Schedule: <white>${status.schedule}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Issue: <white>#${status.issueNumber}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Events stored: <white>${status.eventCount}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>LLM: <white>${if (status.llmAvailable) "<green>online</green>" else "<red>offline/disabled</red>"}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Web: <white>${if (status.webEnabled) "<green>:${status.webPort}</green>" else "<red>disabled</red>"}</white></gray>"))
         return true
     }
 
@@ -165,24 +166,25 @@ class ChroniclerCommand(
         val sessionStore = plugin.getSessionStore()
         val sessionData = if (sessionStore != null) sessionStore.get(uuid) else null
 
-        sender.sendMessage(net.kyori.adventure.text.Component.text("§6Chronicler Stats — §e${target.name}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Total events: §f${playerEvents.size}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Deaths: §f$deaths"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Mob kills: §f$kills"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Blocks placed: §f$blocksPlaced"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Blocks broken: §f$blocksBroken"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Biomes discovered: §f${biomes.size}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Advancements: §f${advancements.size}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Ore types discovered: §f${ores.size}"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Trades: §f$trades"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Messages sent: §f$messagesSent"))
-        sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Logins: §f$logins"))
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        sender.sendMessage(mm.deserialize("<gold>Chronicler Stats — <yellow>${target.name}</yellow></gold>"))
+        sender.sendMessage(mm.deserialize(" <gray>Total events: <white>${playerEvents.size}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Deaths: <white>$deaths</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Mob kills: <white>$kills</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Blocks placed: <white>$blocksPlaced</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Blocks broken: <white>$blocksBroken</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Biomes discovered: <white>${biomes.size}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Advancements: <white>${advancements.size}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Ore types discovered: <white>${ores.size}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Trades: <white>$trades</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Messages sent: <white>$messagesSent</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Logins: <white>$logins</white></gray>"))
         if (sessionData != null) {
             val minutes = sessionData.totalPlaytimeTicks / (20 * 60)
-            sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Playtime: §f${minutes / 60}h ${minutes % 60}m"))
-            sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Sessions: §f${sessionData.sessionCount}"))
-            sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Login streak: §f${sessionData.currentStreak} days"))
-            sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Longest streak: §f${sessionData.longestStreak} days"))
+            sender.sendMessage(mm.deserialize(" <gray>Playtime: <white>${minutes / 60}h ${minutes % 60}m</white></gray>"))
+            sender.sendMessage(mm.deserialize(" <gray>Sessions: <white>${sessionData.sessionCount}</white></gray>"))
+            sender.sendMessage(mm.deserialize(" <gray>Login streak: <white>${sessionData.currentStreak} days</white></gray>"))
+            sender.sendMessage(mm.deserialize(" <gray>Longest streak: <white>${sessionData.longestStreak} days</white></gray>"))
         }
         return true
     }
@@ -199,13 +201,14 @@ class ChroniclerCommand(
                 sender.sendMessage(messages.archiveEmpty())
                 return true
             }
-            sender.sendMessage(net.kyori.adventure.text.Component.text("§6Chronicler Archive — Recent Issues:"))
+            val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+            sender.sendMessage(mm.deserialize("<gold>Chronicler Archive — Recent Issues:</gold>"))
             for (issue in issues) {
                 val date = java.text.SimpleDateFormat("yyyy-MM-dd").format(java.util.Date(issue.toTime))
                 val stories = issue.sections.sumOf { it.stories.size }
-                sender.sendMessage(net.kyori.adventure.text.Component.text(" §7#${issue.issueNumber} §f($date) §7— §f$stories stories"))
+                sender.sendMessage(mm.deserialize(" <gray>#${issue.issueNumber} <white>($date)</white> — <white>$stories stories</white></gray>"))
             }
-            sender.sendMessage(net.kyori.adventure.text.Component.text(" §7Use §a/chronicler archive read <#> §7to view an issue."))
+            sender.sendMessage(mm.deserialize(" <gray>Use <green>/chronicler archive read <#></green> to view an issue.</gray>"))
             return true
         }
 
@@ -247,11 +250,11 @@ class ChroniclerCommand(
         sender.sendMessage(messages.helpHeader())
         sender.sendMessage(messages.helpRead())
         sender.sendMessage(messages.helpWeb())
-        sender.sendMessage(messages.helpStatus())
         sender.sendMessage(messages.helpStats())
         sender.sendMessage(messages.helpSubscribe())
         sender.sendMessage(messages.helpArchiveList())
         if (sender.hasPermission("chronicler.admin")) {
+            sender.sendMessage(messages.helpStatus())
             sender.sendMessage(messages.helpArchiveRead())
             sender.sendMessage(messages.helpReload())
             sender.sendMessage(messages.helpPublish())

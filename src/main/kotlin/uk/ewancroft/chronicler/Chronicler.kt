@@ -59,9 +59,10 @@ class Chronicler : JavaPlugin() {
 
     override fun onEnable() {
         saveDefaultConfig()
+        saveResource("messages.yml", false)
         val cfg = PluginConfig(config)
         if (cfg.bStatsEnabled) {
-            Metrics(this, 0)
+            Metrics(this, 23467)
         }
         UpdateChecker(this, "ewanc26", "Chronicler").checkAsync()
         state = buildState()
