@@ -183,7 +183,7 @@ class PublicationTask(
     private fun saveState() {
         try {
             Files.createDirectories(stateFile.parent)
-            stateFile.toFile().writeText("$issueNumber\n$lastPublishTime")
+            Files.writeString(stateFile, "$issueNumber\n$lastPublishTime")
         } catch (_: Exception) {
         }
     }

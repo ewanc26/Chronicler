@@ -3,6 +3,7 @@ package uk.ewancroft.chronicler
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bstats.bukkit.Metrics
 import org.bukkit.Bukkit
+import org.bukkit.command.Command
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.command.ChroniclerCommand
@@ -184,18 +185,29 @@ class Chronicler : JavaPlugin() {
         } else null
 
         val command = ChroniclerCommand(this, messages, subscribeStore)
-        try {
+        val registered = try {
             getCommand("chronicler")?.let { cmd ->
                 cmd.setExecutor(command)
                 cmd.setTabCompleter(command)
-            }
+                true
+            } ?: false
         } catch (_: UnsupportedOperationException) {
-            Bukkit.getGlobalRegionScheduler().run(this) { _ ->
-                getCommand("chronicler")?.let { cmd ->
-                    cmd.setExecutor(command)
-                    cmd.setTabCompleter(command)
+            false
+        }
+        if (!registered) {
+            val cmd = object : Command("chronicler") {
+                override fun execute(sender: org.bukkit.command.CommandSender, label: String, args: Array<out String>): Boolean {
+                    return command.onCommand(sender, this, label, args)
+                }
+                override fun tabComplete(sender: org.bukkit.command.CommandSender, alias: String, args: Array<out String>): MutableList<String> {
+                    return (command.onTabComplete(sender, this, alias, args) ?: emptyList()).toMutableList()
                 }
             }
+            cmd.description = "Chronicler commands."
+            cmd.setAliases(listOf("clr"))
+            cmd.permission = "chronicler.use"
+            val commandMap = server::class.java.getMethod("getCommandMap").invoke(server) as org.bukkit.command.CommandMap
+            commandMap.register("chronicler", cmd)
         }
 
         return PluginState(
