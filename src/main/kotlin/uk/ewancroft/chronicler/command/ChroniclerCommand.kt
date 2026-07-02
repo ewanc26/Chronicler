@@ -305,9 +305,9 @@ class ChroniclerCommand(
         sender.sendMessage(messages.helpStats())
         sender.sendMessage(messages.helpSubscribe())
         sender.sendMessage(messages.helpArchiveList())
+        sender.sendMessage(messages.helpArchiveRead())
         if (sender.hasPermission("chronicler.admin")) {
             sender.sendMessage(messages.helpStatus())
-            sender.sendMessage(messages.helpArchiveRead())
             sender.sendMessage(messages.helpReload())
             sender.sendMessage(messages.helpPublish())
             val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
