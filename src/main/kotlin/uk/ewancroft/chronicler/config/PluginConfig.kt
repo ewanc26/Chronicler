@@ -49,6 +49,8 @@ class PluginConfig(private val config: FileConfiguration) {
     val newspaper: NewspaperConfig
     val web: WebConfig
     val configVersion: Int
+    val tickerInterval: Long
+    val papiEnabled: Boolean
 
     init {
         enabled = config.getBoolean("enabled", true)
@@ -56,6 +58,8 @@ class PluginConfig(private val config: FileConfiguration) {
         publishDay = config.getInt("publish-day", 0)
         publishHour = config.getInt("publish-hour", 8)
         eventLimit = config.getInt("event-limit", 500).coerceAtLeast(100)
+        tickerInterval = config.getLong("ticker.interval-ticks", 1200).coerceAtLeast(0)
+        papiEnabled = config.getBoolean("ticker.papi-enabled", true)
         llm = LlmConfig(
             enabled = config.getBoolean("llm.enabled", true),
             provider = (config.getString("llm.provider", "ollama") ?: "ollama").lowercase(),

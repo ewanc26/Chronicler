@@ -17,6 +17,10 @@ enum class EventType {
     PLAYER_JOIN,
     PLAYER_LEAVE,
     TRADE,
+    SESSION_START,
+    SESSION_END,
+    MILESTONE_LOGIN_STREAK,
+    MILESTONE_PLAYTIME,
 }
 
 @Serializable
@@ -29,6 +33,7 @@ data class ChronicleEvent(
     val details: Map<String, String> = emptyMap(),
 )
 
+@Serializable
 data class Newspaper(
     val issueNumber: Int,
     val fromTime: Long,
@@ -36,11 +41,13 @@ data class Newspaper(
     val sections: List<NewspaperSection>,
 )
 
+@Serializable
 data class NewspaperSection(
     val title: String,
     val stories: List<Story>,
 )
 
+@Serializable
 data class Story(
     val headline: String,
     val body: String,

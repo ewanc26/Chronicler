@@ -20,17 +20,31 @@ fun buildPrompt(sectionTitle: String, eventSummary: String): String {
 }
 
 fun parseArticle(text: String): ArticleResult? {
-    val headlineMatch = Regex("---HEADLINE\\s*\\n(.+)", RegexOption.DOT_MATCHES_ALL).find(text)
-    val bodyMatch = Regex("---BODY\\s*\\n(.+)", RegexOption.DOT_MATCHES_ALL).find(text)
+    val trimmed = text.trim()
+    if (trimmed.isBlank()) return null
 
-    val headline = headlineMatch?.groupValues?.getOrNull(1)?.trim()
-    val body = bodyMatch?.groupValues?.getOrNull(1)?.trim()
+    val hasHeadline = trimmed.contains("---HEADLINE")
+    val hasBody = trimmed.contains("---BODY")
 
-    if (headline != null && body != null) {
-        return ArticleResult(headline, body)
+    if (hasHeadline && hasBody) {
+        val headline = trimmed
+            .substringAfter("---HEADLINE")
+            .substringBefore("---BODY")
+            .trim()
+            .lineSequence()
+            .firstOrNull()
+            ?.removePrefix("**")
+            ?.removeSuffix("**")
+            ?.trim()
+        val body = trimmed
+            .substringAfter("---BODY")
+            .trim()
+        if (!headline.isNullOrBlank() && !body.isBlank()) {
+            return ArticleResult(headline, body)
+        }
     }
 
-    val lines = text.lines().filter { it.isNotBlank() }
+    val lines = trimmed.lines().filter { it.isNotBlank() }
     if (lines.size >= 2) {
         return ArticleResult(
             headline = lines.first().trim().removePrefix("**").removeSuffix("**"),

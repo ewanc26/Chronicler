@@ -11,13 +11,22 @@ repositories {
     maven {
         url = 'https://repo.papermc.io/repository/maven-public/'
     }
+    maven {
+        url = 'https://repo.extendedclip.com/content/repositories/placeholderapi/'
+    }
 }
 
 dependencies {
     compileOnly 'io.papermc.paper:paper-api:26.1.2.build.72-stable'
+    compileOnly 'me.clip:placeholderapi:2.11.6'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.3.21'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
     implementation 'org.bstats:bstats-bukkit:3.1.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test:2.3.21'
+    testImplementation 'org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.35.0'
+    testImplementation 'net.kyori:adventure-text-minimessage:4.20.0'
 }
 
 java {
@@ -46,6 +55,10 @@ shadowJar {
     exclude 'org/bukkit/**', 'io/papermc/**', 'net/kyori/**'
     exclude 'META-INF/versions/**', 'META-INF/libraries/**'
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 build.dependsOn shadowJar

@@ -1,0 +1,168 @@
+package uk.ewancroft.chronicler.news
+
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import uk.ewancroft.chronicler.config.NewspaperConfig
+import java.nio.file.Path
+import java.util.logging.Logger
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class NewspaperGeneratorTest {
+
+    @TempDir
+    lateinit var tempDir: Path
+
+    private lateinit var store: EventStore
+    private val config = NewspaperConfig(
+        title = "Test Chronicle",
+        author = "Tester",
+        storiesPerSection = 5,
+        showStatistics = true,
+    )
+    private val logger = Logger.getLogger("TestLogger")
+
+    @BeforeEach
+    fun setUp() {
+        store = EventStore(tempDir.resolve("events.json"))
+    }
+
+    private fun event(type: EventType, player: String = "ewanc26", details: Map<String, String> = emptyMap()): ChronicleEvent =
+        ChronicleEvent(type, System.currentTimeMillis(), player, "uuid-$player", "world", details)
+
+    @Test
+    fun `generate with no events produces quiet newspaper`() {
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        assertEquals(1, newspaper.issueNumber)
+        assertTrue(newspaper.sections.isNotEmpty())
+    }
+
+    @Test
+    fun `generate includes Headlines section even with no events`() {
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val headlines = newspaper.sections.find { it.title == "Headlines" }
+        assertNotNull(headlines)
+        assertEquals(1, headlines.stories.size)
+        assertEquals("Quiet Days", headlines.stories[0].headline)
+    }
+
+    @Test
+    fun `generate creates Obituaries section when deaths exist`() {
+        store.record(event(EventType.DEATH, details = mapOf("message" to "ewanc26 fell")))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val obits = newspaper.sections.find { it.title == "Obituaries" }
+        assertNotNull(obits)
+        assertTrue(obits.stories.isNotEmpty())
+        assert(obits.stories[0].headline.contains("ewanc26"))
+    }
+
+    @Test
+    fun `generate creates Achievements section when advancements exist`() {
+        store.record(event(EventType.ADVANCEMENT, details = mapOf("advancement" to "story/root", "displayName" to "Minecraft")))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val ach = newspaper.sections.find { it.title == "Achievements" }
+        assertNotNull(ach)
+        assertTrue(ach.stories.isNotEmpty())
+    }
+
+    @Test
+    fun `generate creates Hunting Grounds section when kills exist`() {
+        store.record(event(EventType.KILL, details = mapOf("entity" to "zombie")))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val hunting = newspaper.sections.find { it.title == "Hunting Grounds" }
+        assertNotNull(hunting)
+        assertTrue(hunting.stories.isNotEmpty())
+    }
+
+    @Test
+    fun `generate creates Exploration section when biomes discovered`() {
+        store.record(event(EventType.BIOME_DISCOVERY, details = mapOf("biome" to "desert")))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val expl = newspaper.sections.find { it.title == "Exploration & Building" }
+        assertNotNull(expl)
+        assertTrue(expl.stories.isNotEmpty())
+    }
+
+    @Test
+    fun `generate creates Statistics section when enabled`() {
+        store.record(event(EventType.PLAYER_JOIN))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val stats = newspaper.sections.find { it.title == "Statistics" }
+        assertNotNull(stats)
+        assertTrue(stats.stories.any { it.headline.contains("Active Players") })
+        assertTrue(stats.stories.any { it.headline.contains("Total Events") })
+    }
+
+    @Test
+    fun `generate omits Statistics section when disabled`() {
+        val cfg = config.copy(showStatistics = false)
+        store.record(event(EventType.PLAYER_JOIN))
+        val gen = NewspaperGenerator(store, cfg, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val stats = newspaper.sections.find { it.title == "Statistics" }
+        assertNull(stats)
+    }
+
+    @Test
+    fun `generate respects storiesPerSection limit`() {
+        val cfg = config.copy(storiesPerSection = 2)
+        repeat(10) {
+            store.record(event(EventType.DEATH, player = "p$it", details = mapOf("message" to "p$it died")))
+        }
+        val gen = NewspaperGenerator(store, cfg, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val obits = newspaper.sections.find { it.title == "Obituaries" }
+        assertNotNull(obits)
+        assertTrue(obits.stories.size <= 2)
+    }
+
+    @Test
+    fun `generate filters events outside time range`() {
+        store.record(event(EventType.DEATH, player = "old", details = mapOf("message" to "old death")))
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, System.currentTimeMillis() + 1000, System.currentTimeMillis() + 2000)
+
+        val obits = newspaper.sections.find { it.title == "Obituaries" }
+        assertNull(obits, "Should not include events outside the time range")
+    }
+
+    @Test
+    fun `generate with multiple event types produces all relevant sections`() {
+        store.record(event(EventType.DEATH, player = "a", details = mapOf("message" to "a died")))
+        store.record(event(EventType.KILL, player = "b", details = mapOf("entity" to "skeleton")))
+        store.record(event(EventType.ADVANCEMENT, player = "c", details = mapOf("advancement" to "story/root")))
+        store.record(event(EventType.BIOME_DISCOVERY, player = "d", details = mapOf("biome" to "plains")))
+        store.record(event(EventType.PVP_KILL, player = "e", details = mapOf("killer" to "f")))
+        store.record(event(EventType.BLOCK_PLACE, player = "g", details = mapOf("block" to "stone")))
+
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val titles = newspaper.sections.map { it.title }
+        assertTrue("Headlines" in titles)
+        assertTrue("Obituaries" in titles)
+        assertTrue("Achievements" in titles)
+        assertTrue("Hunting Grounds" in titles)
+        assertTrue("Exploration & Building" in titles)
+        assertTrue("Statistics" in titles)
+    }
+}

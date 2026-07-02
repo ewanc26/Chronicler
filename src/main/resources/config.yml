@@ -62,6 +62,13 @@ newspaper:
   # Include raw statistics page.
   show-statistics: true
 
+# Headline ticker — periodically broadcasts a headline from the current issue.
+ticker:
+  # Interval in ticks (20 ticks = 1 second). Set to 0 to disable.
+  interval-ticks: 1200
+  # Enable PlaceholderAPI expansion (%chronicler_*%).
+  papi-enabled: true
+
 # Web output.
 web:
   enabled: true

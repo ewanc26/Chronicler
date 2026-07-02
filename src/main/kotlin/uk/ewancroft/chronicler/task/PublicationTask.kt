@@ -5,11 +5,14 @@ import org.bukkit.Bukkit
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.config.PluginConfig
+import uk.ewancroft.chronicler.news.ArchiveStore
 import uk.ewancroft.chronicler.news.BookRenderer
 import uk.ewancroft.chronicler.news.EventStore
 import uk.ewancroft.chronicler.news.Newspaper
 import uk.ewancroft.chronicler.news.NewspaperGenerator
 import uk.ewancroft.chronicler.news.WebRenderer
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Calendar
 import java.util.logging.Logger
 
@@ -20,16 +23,25 @@ class PublicationTask(
     private val generator: NewspaperGenerator,
     private val bookRenderer: BookRenderer,
     private val webRenderer: WebRenderer?,
+    private val archiveStore: ArchiveStore?,
     private val logger: Logger,
 ) {
 
     private var issueNumber = 0
-    private var lastPublishTime = System.currentTimeMillis()
+    private var lastPublishTime = 0L
     private var latestBook: ItemStack? = null
     private var latestNewspaper: Newspaper? = null
     private var scheduledTask: ScheduledTask? = null
+    private val stateFile: Path = plugin.dataFolder.toPath().resolve("publish-state.json")
 
     fun start() {
+        loadState()
+
+        if (issueNumber == 0 && lastPublishTime == 0L && store.allEvents().isNotEmpty()) {
+            logger.info("No prior issues found — publishing issue #0 with ${store.allEvents().size} backlogged events.")
+            doPublish(isIssueZero = true)
+        }
+
         val schedule = config.schedule
         val interval = when (schedule.uppercase()) {
             "HOURLY" -> 20L * 60L * 60L
@@ -56,6 +68,7 @@ class PublicationTask(
     fun stop() {
         scheduledTask?.cancel()
         scheduledTask = null
+        saveState()
     }
 
     fun publishNow() {
@@ -91,28 +104,29 @@ class PublicationTask(
         }
     }
 
-    private fun doPublish() {
-        issueNumber++
+    private fun doPublish(isIssueZero: Boolean = false) {
         val toTime = System.currentTimeMillis()
-        val fromTime = lastPublishTime
+        val fromTime = if (isIssueZero) 0L else lastPublishTime
+        val number = if (isIssueZero) 0 else issueNumber + 1
 
         try {
-            val newspaper = generator.generate(issueNumber, fromTime, toTime)
+            val newspaper = generator.generate(number, fromTime, toTime)
             val book = bookRenderer.renderToBook(newspaper)
 
             latestNewspaper = newspaper
             latestBook = book
+            archiveStore?.archive(newspaper)
 
             Bukkit.getOnlinePlayers().forEach { player ->
                 val remaining = player.inventory.addItem(book.clone())
                 if (remaining.isEmpty()) {
                     player.sendMessage(
-                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$issueNumber has arrived in your inventory!")
+                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number has arrived in your inventory!")
                     )
                 } else {
                     player.world.dropItem(player.location, book.clone())
                     player.sendMessage(
-                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$issueNumber dropped at your feet (inventory full).")
+                        net.kyori.adventure.text.Component.text("§6[Chronicler] §e${config.newspaper.title} #$number dropped at your feet (inventory full).")
                     )
                 }
             }
@@ -120,11 +134,38 @@ class PublicationTask(
             webRenderer?.renderAndServe(newspaper)
 
             lastPublishTime = toTime
+            if (!isIssueZero) {
+                issueNumber = number
+            }
             store.clear()
+            saveState()
 
-            logger.info("Published issue #$issueNumber")
+            logger.info("Published issue #$number")
         } catch (e: Exception) {
-            logger.warning("Failed to publish issue #$issueNumber: ${e.message}")
+            logger.warning("Failed to publish issue #$number: ${e.message}")
+        }
+    }
+
+    private fun loadState() {
+        try {
+            if (Files.exists(stateFile)) {
+                val text = stateFile.toFile().readText()
+                val lines = text.lines()
+                if (lines.size >= 2) {
+                    issueNumber = lines[0].toIntOrNull() ?: 0
+                    lastPublishTime = lines[1].toLongOrNull() ?: System.currentTimeMillis()
+                }
+            }
+        } catch (_: Exception) {
+            lastPublishTime = 0L
+        }
+    }
+
+    private fun saveState() {
+        try {
+            Files.createDirectories(stateFile.parent)
+            stateFile.toFile().writeText("$issueNumber\n$lastPublishTime")
+        } catch (_: Exception) {
         }
     }
 

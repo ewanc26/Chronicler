@@ -4,19 +4,25 @@ import org.bstats.bukkit.Metrics
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.command.ChroniclerCommand
+import uk.ewancroft.chronicler.command.ChroniclerExpansion
 import uk.ewancroft.chronicler.config.PluginConfig
 import uk.ewancroft.chronicler.llm.AnthropicProvider
 import uk.ewancroft.chronicler.llm.LlmProvider
 import uk.ewancroft.chronicler.llm.OllamaProvider
 import uk.ewancroft.chronicler.llm.OpenAiProvider
+import uk.ewancroft.chronicler.news.ArchiveStore
 import uk.ewancroft.chronicler.news.BookRenderer
 import uk.ewancroft.chronicler.news.EventStore
+import uk.ewancroft.chronicler.news.Newspaper
 import uk.ewancroft.chronicler.news.NewspaperGenerator
 import uk.ewancroft.chronicler.news.WebRenderer
+import uk.ewancroft.chronicler.task.HeadlineTicker
 import uk.ewancroft.chronicler.task.PublicationTask
 import uk.ewancroft.chronicler.tracker.BuildTracker
 import uk.ewancroft.chronicler.tracker.DeathTracker
 import uk.ewancroft.chronicler.tracker.MilestoneTracker
+import uk.ewancroft.chronicler.tracker.SessionStore
+import uk.ewancroft.chronicler.tracker.SessionTracker
 import uk.ewancroft.chronicler.tracker.SocialTracker
 
 class Chronicler : JavaPlugin() {
@@ -30,6 +36,10 @@ class Chronicler : JavaPlugin() {
     private lateinit var command: ChroniclerCommand
     private var pluginConfig: PluginConfig? = null
     private var llmAvailable = false
+    private var sessionStore: SessionStore? = null
+    private var archiveStore: ArchiveStore? = null
+    private var headlineTicker: HeadlineTicker? = null
+    private var papiExpansion: ChroniclerExpansion? = null
 
     override fun onEnable() {
         saveDefaultConfig()
@@ -41,10 +51,18 @@ class Chronicler : JavaPlugin() {
 
         val dataPath = dataFolder.toPath()
         val storeFile = dataPath.resolve("events.json")
+        val sessionFile = dataPath.resolve("sessions.json")
+        val archiveDir = dataPath.resolve("archive")
 
         eventStore = EventStore(storeFile)
         eventStore.setMaxEvents(cfg.eventLimit)
         eventStore.load()
+
+        sessionStore = SessionStore(sessionFile)
+        sessionStore?.load()
+
+        archiveStore = ArchiveStore(archiveDir)
+        archiveStore?.loadAll()
 
         llmProvider = if (cfg.llm.enabled) {
             val provider = createProvider(cfg.llm)
@@ -73,12 +91,15 @@ class Chronicler : JavaPlugin() {
             logger.info("Web view disabled.")
         }
 
-        val trackers = listOf(
+        val trackers = mutableListOf(
             DeathTracker(eventStore, cfg.tracking),
             MilestoneTracker(eventStore, cfg.tracking),
             BuildTracker(eventStore, cfg.tracking),
             SocialTracker(eventStore, cfg.tracking),
         )
+        if (sessionStore != null) {
+            trackers.add(SessionTracker(eventStore, sessionStore!!, cfg.tracking))
+        }
         trackers.forEach { server.pluginManager.registerEvents(it, this) }
 
         publicationTask = PublicationTask(
@@ -88,9 +109,30 @@ class Chronicler : JavaPlugin() {
             generator = generator,
             bookRenderer = bookRenderer,
             webRenderer = webRenderer,
+            archiveStore = archiveStore,
             logger = logger,
         )
         publicationTask.start()
+
+        headlineTicker = HeadlineTicker(
+            plugin = this,
+            logger = logger,
+            intervalTicks = cfg.tickerInterval,
+            getLatestNewspaper = { publicationTask.getLatestNewspaper() },
+        )
+        headlineTicker?.start()
+
+        papiExpansion = if (cfg.papiEnabled) {
+            try {
+                val exp = ChroniclerExpansion(this, sessionStore)
+                exp.register()
+                logger.info("PlaceholderAPI expansion registered.")
+                exp
+            } catch (_: NoClassDefFoundError) {
+                logger.info("PlaceholderAPI not found, expansion skipped.")
+                null
+            }
+        } else null
 
         command = ChroniclerCommand(this)
         val cmd = getCommand("chronicler") ?: return
@@ -103,7 +145,9 @@ class Chronicler : JavaPlugin() {
     override fun onDisable() {
         publicationTask.stop()
         webRenderer?.stop()
+        headlineTicker?.stop()
         eventStore.save()
+        sessionStore?.save()
         pluginConfig = null
         logger.info("Chronicler disabled.")
     }
@@ -131,6 +175,7 @@ class Chronicler : JavaPlugin() {
         pluginConfig = PluginConfig(config)
         eventStore.setMaxEvents(pluginConfig!!.eventLimit)
         publicationTask.stop()
+        headlineTicker?.stop()
         publicationTask = PublicationTask(
             plugin = this,
             config = pluginConfig!!,
@@ -138,12 +183,34 @@ class Chronicler : JavaPlugin() {
             generator = generator,
             bookRenderer = bookRenderer,
             webRenderer = webRenderer,
+            archiveStore = archiveStore,
             logger = logger,
         )
         publicationTask.start()
+        headlineTicker = HeadlineTicker(
+            plugin = this,
+            logger = logger,
+            intervalTicks = pluginConfig!!.tickerInterval,
+            getLatestNewspaper = { publicationTask.getLatestNewspaper() },
+        )
+        headlineTicker?.start()
     }
 
     fun getWebPort(): Int = pluginConfig?.web?.port ?: 0
+
+    fun getLastPublishTime(): Long = publicationTask.getLastPublishTime()
+
+    fun getLatestNewspaper(): Newspaper? = publicationTask.getLatestNewspaper()
+
+    fun getArchiveStore(): ArchiveStore? = archiveStore
+
+    fun getSessionStore(): SessionStore? = sessionStore
+
+    fun getEventStore(): EventStore = eventStore
+
+    fun getNewspaperConfig() = pluginConfig?.newspaper
+
+    fun getBookRenderer(): BookRenderer = bookRenderer
 
     fun getStatus(): PluginStatus {
         val cfg = pluginConfig
