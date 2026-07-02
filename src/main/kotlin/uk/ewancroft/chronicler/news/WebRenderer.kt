@@ -316,7 +316,9 @@ class WebRenderer(
             val addr = InetSocketAddress(webConfig.port)
             server = HttpServer.create(addr, 0).also { srv ->
                 srv.createContext("/", this::handleRequest)
-                srv.executor = Executors.newSingleThreadExecutor()
+                srv.executor = Executors.newFixedThreadPool(
+                    Runtime.getRuntime().availableProcessors().coerceIn(2, 8),
+                )
                 srv.start()
             }
         } catch (_: Exception) {

@@ -20,6 +20,7 @@ import java.util.logging.Level
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.logging.Logger
+import java.util.concurrent.atomic.AtomicBoolean
 
 class PublicationTask(
     private val plugin: JavaPlugin,
@@ -44,6 +45,7 @@ class PublicationTask(
     private val stateFile: Path = plugin.dataFolder.toPath().resolve("publish-state.json")
     private val draftFile: Path = plugin.dataFolder.toPath().resolve("draft-issue.json")
     private val deliveredPlayers = mutableSetOf<String>()
+    private val generationInProgress = AtomicBoolean(false)
 
     fun start() {
         loadState()
@@ -98,17 +100,32 @@ class PublicationTask(
         saveState()
     }
 
-    fun publishNow() {
-        if (config.reviewRequired) createDraft() else doPublish()
+    fun publishNow(): Boolean {
+        return if (config.reviewRequired) createDraftAsync() else doPublish()
     }
 
-    fun createDraft(): Newspaper {
+    fun createDraftAsync(onComplete: ((Newspaper?) -> Unit)? = null): Boolean {
+        if (!generationInProgress.compareAndSet(false, true)) return false
         val number = issueNumber + 1
-        return generator.generate(number, lastPublishTime, System.currentTimeMillis()).also {
-            draftNewspaper = it
-            saveDraft()
-            logger.info("Created draft issue #$number with ${it.sections.sumOf { section -> section.stories.size }} stories; awaiting editor approval.")
+        val fromTime = lastPublishTime
+        val toTime = System.currentTimeMillis()
+        Bukkit.getAsyncScheduler().runNow(plugin) {
+            val result = runCatching { generator.generate(number, fromTime, toTime) }
+            Bukkit.getGlobalRegionScheduler().run(plugin) {
+                val newspaper = result.getOrElse { error ->
+                    logger.log(Level.SEVERE, "Failed to create draft issue #$number.", error)
+                    null
+                }
+                if (newspaper != null) {
+                    draftNewspaper = newspaper
+                    saveDraft()
+                    logger.info("Created draft issue #$number with ${newspaper.sections.sumOf { section -> section.stories.size }} stories; awaiting editor approval.")
+                }
+                generationInProgress.set(false)
+                onComplete?.invoke(newspaper)
+            }
         }
+        return true
     }
 
     fun getDraft(): Newspaper? = draftNewspaper
@@ -198,20 +215,29 @@ class PublicationTask(
         }
     }
 
-    private fun doPublish(isIssueZero: Boolean = false, cutoffTime: Long = System.currentTimeMillis()) {
+    private fun doPublish(isIssueZero: Boolean = false, cutoffTime: Long = System.currentTimeMillis()): Boolean {
+        if (!generationInProgress.compareAndSet(false, true)) return false
         val toTime = cutoffTime
         val fromTime = if (isIssueZero) 0L else lastPublishTime
         val number = if (isIssueZero) 0 else issueNumber + 1
         val eventCount = store.eventsSince(fromTime).count { it.timestamp <= toTime }
         val startedAt = System.currentTimeMillis()
 
-        try {
-            logger.info("Starting publication of issue #$number with $eventCount events ($fromTime to $toTime).")
-            val newspaper = generator.generate(number, fromTime, toTime)
-            publishNewspaper(newspaper, toTime, isIssueZero, startedAt, eventCount)
-        } catch (e: Exception) {
-            logger.log(Level.SEVERE, "Failed to publish issue #$number after ${System.currentTimeMillis() - startedAt}ms.", e)
+        logger.info("Starting publication of issue #$number with $eventCount events ($fromTime to $toTime).")
+        Bukkit.getAsyncScheduler().runNow(plugin) {
+            val result = runCatching { generator.generate(number, fromTime, toTime) }
+            Bukkit.getGlobalRegionScheduler().run(plugin) {
+                try {
+                    result.fold(
+                        onSuccess = { publishNewspaper(it, toTime, isIssueZero, startedAt, eventCount) },
+                        onFailure = { logger.log(Level.SEVERE, "Failed to publish issue #$number after ${System.currentTimeMillis() - startedAt}ms.", it) },
+                    )
+                } finally {
+                    generationInProgress.set(false)
+                }
+            }
         }
+        return true
     }
 
     private fun publishNewspaper(

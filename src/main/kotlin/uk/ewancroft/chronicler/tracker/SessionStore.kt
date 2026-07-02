@@ -28,19 +28,19 @@ class SessionStore(private val dataPath: Path) {
     private val sessions = mutableMapOf<String, SessionData>()
 
     fun getOrCreate(uuid: String, name: String): SessionData {
-        val data = sessions.getOrPut(uuid) {
-            loadPlayer(uuid) ?: SessionData(playerName = name, playerUuid = uuid)
+        synchronized(sessions) {
+            val data = sessions.getOrPut(uuid) { SessionData(playerName = name, playerUuid = uuid) }
+            data.playerName = name
+            return data
         }
-        data.playerName = name
-        return data
     }
 
-    fun get(uuid: String): SessionData? = sessions[uuid]
+    fun get(uuid: String): SessionData? = synchronized(sessions) { sessions[uuid] }
 
-    fun getAll(): List<SessionData> = sessions.values.toList()
+    fun getAll(): List<SessionData> = synchronized(sessions) { sessions.values.toList() }
 
     fun savePlayer(data: SessionData) {
-        sessions[data.playerUuid] = data
+        synchronized(sessions) { sessions[data.playerUuid] = data }
     }
 
     fun save() {
@@ -65,15 +65,4 @@ class SessionStore(private val dataPath: Path) {
         }
     }
 
-    private fun loadPlayer(uuid: String): SessionData? {
-        return try {
-            if (Files.exists(dataPath)) {
-                val text = dataPath.toFile().readText()
-                val loaded: Map<String, SessionData> = json.decodeFromString(text)
-                loaded[uuid]
-            } else null
-        } catch (_: Exception) {
-            null
-        }
-    }
 }

@@ -102,12 +102,14 @@ class ChroniclerCommand(
                 }
             }
             "preview" -> {
-                val issue = plugin.previewNextIssue()
-                if (issue == null) sender.sendMessage(messages.pluginNotReady())
-                else {
-                    val stories = issue.sections.sumOf { it.stories.size }
-                    sender.sendMessage(mm.deserialize("<green>Previewed issue <white>#${issue.issueNumber}</white>: <white>${issue.sections.size}</white> sections, <white>$stories</white> stories. No state was changed.</green>"))
+                val started = plugin.previewNextIssue { issue ->
+                    if (issue == null) sender.sendMessage(mm.deserialize("<red>Preview generation failed.</red>"))
+                    else {
+                        val stories = issue.sections.sumOf { it.stories.size }
+                        sender.sendMessage(mm.deserialize("<green>Previewed issue <white>#${issue.issueNumber}</white>: <white>${issue.sections.size}</white> sections, <white>$stories</white> stories. No state was changed.</green>"))
+                    }
                 }
+                sender.sendMessage(if (started) mm.deserialize("<gray>Generating preview…</gray>") else messages.pluginNotReady())
             }
             else -> sender.sendMessage(mm.deserialize("<yellow>Usage: /chronicler test event <type>, events [limit], or preview</yellow>"))
         }
@@ -175,8 +177,7 @@ class ChroniclerCommand(
             sender.sendMessage(messages.noPermission())
             return true
         }
-        plugin.publishNow()
-        sender.sendMessage(messages.publishDone())
+        sender.sendMessage(if (plugin.publishNow()) messages.publishDone() else net.kyori.adventure.text.Component.text("A publication is already being generated."))
         return true
     }
 
@@ -326,8 +327,10 @@ class ChroniclerCommand(
         val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
         when (args.getOrNull(1)?.lowercase()) {
             "create" -> {
-                val draft = plugin.createDraft()
-                sender.sendMessage(mm.deserialize(draft?.let { "<green>Created draft issue #${it.issueNumber}.</green>" } ?: "<red>Plugin not ready.</red>"))
+                val started = plugin.createDraft { draft ->
+                    sender.sendMessage(mm.deserialize(draft?.let { "<green>Created draft issue #${it.issueNumber}.</green>" } ?: "<red>Draft generation failed.</red>"))
+                }
+                sender.sendMessage(mm.deserialize(if (started) "<gray>Generating draft…</gray>" else "<yellow>Generation is already in progress or the plugin is not ready.</yellow>"))
             }
             "preview" -> {
                 val draft = plugin.getDraft()

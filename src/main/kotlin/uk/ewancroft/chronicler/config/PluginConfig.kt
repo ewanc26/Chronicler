@@ -160,13 +160,6 @@ class PluginConfig(private val config: FileConfiguration) {
             excludedPlayers = config.getStringList("privacy.excluded-players").map { it.lowercase() }.toSet(),
         )
         configVersion = config.getInt("config-version", 2)
-        migrateConfig()
-    }
-
-    private fun migrateConfig() {
-        val version = config.getInt("config-version", 0)
-        if (version >= 2) return
-        config.set("config-version", 2)
     }
 
     private fun color(value: String?, fallback: Int): Int = value?.removePrefix("#")?.toIntOrNull(16) ?: fallback

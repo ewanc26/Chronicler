@@ -733,7 +733,10 @@ class NewspaperGenerator(
 
     private fun generateStatistics(events: List<ChronicleEvent>): NewspaperSection {
         val stats = mutableListOf<Story>()
-        val allPlayers = events.map { it.playerName }.distinct()
+        // System-generated events (weather, explosions, entity transforms, etc.) are recorded
+        // with a blank playerUuid and a sentinel playerName (e.g. "world", "nature", "unknown").
+        // Only count events with a real player attached as "active players".
+        val allPlayers = events.filter { it.playerUuid.isNotBlank() }.map { it.playerName }.distinct()
         stats.add(Story("Active Players", "${allPlayers.size} unique player(s) this cycle", allPlayers, null))
         stats.add(Story("Total Events", "${events.size} events recorded", emptyList(), null))
         val joinCount = events.count { it.type == EventType.PLAYER_JOIN }

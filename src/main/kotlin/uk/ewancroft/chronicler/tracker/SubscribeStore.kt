@@ -17,13 +17,14 @@ class SubscribeStore(private val dataPath: Path) {
     private val subscriptions = mutableMapOf<String, SubscriptionData>()
 
     fun isSubscribed(uuid: String): Boolean {
-        return subscriptions.getOrPut(uuid) { SubscriptionData(true) }.subscribed
+        return synchronized(subscriptions) { subscriptions[uuid]?.subscribed ?: true }
     }
 
     fun toggle(uuid: String): Boolean {
-        val current = subscriptions.getOrPut(uuid) { SubscriptionData(true) }
-        val new = current.copy(subscribed = !current.subscribed)
-        subscriptions[uuid] = new
+        val new = synchronized(subscriptions) {
+            val current = subscriptions[uuid] ?: SubscriptionData(true)
+            current.copy(subscribed = !current.subscribed).also { subscriptions[uuid] = it }
+        }
         save()
         return new.subscribed
     }
@@ -33,7 +34,10 @@ class SubscribeStore(private val dataPath: Path) {
             if (Files.exists(dataPath)) {
                 val text = dataPath.toFile().readText()
                 val loaded = json.decodeFromString<Map<String, SubscriptionData>>(text)
-                subscriptions.putAll(loaded)
+                synchronized(subscriptions) {
+                    subscriptions.clear()
+                    subscriptions.putAll(loaded)
+                }
             }
         } catch (_: Exception) {
         }
@@ -42,7 +46,8 @@ class SubscribeStore(private val dataPath: Path) {
     fun save() {
         try {
             Files.createDirectories(dataPath.parent)
-            dataPath.toFile().writeText(json.encodeToString(subscriptions))
+            val snapshot = synchronized(subscriptions) { subscriptions.toMap() }
+            dataPath.toFile().writeText(json.encodeToString(snapshot))
         } catch (_: Exception) {
         }
     }

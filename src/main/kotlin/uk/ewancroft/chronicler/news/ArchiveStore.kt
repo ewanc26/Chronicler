@@ -97,9 +97,21 @@ class ArchiveStore(
     }
 
     fun importIssue(source: Path): Newspaper? {
-        val newspaper = json.decodeFromString<Newspaper>(Files.readString(source))
-        archive(newspaper)
-        return newspaper
+        return try {
+            val newspaper = json.decodeFromString<Newspaper>(Files.readString(source))
+            synchronized(archives) {
+                if (archives.any { it.issueNumber == newspaper.issueNumber } ||
+                    Files.exists(archiveDir.resolve("issue-${newspaper.issueNumber}.json"))) {
+                    logger.warning("Refusing to import issue #${newspaper.issueNumber}: an archive with that number already exists.")
+                    return null
+                }
+            }
+            archive(newspaper)
+            newspaper
+        } catch (e: Exception) {
+            logger.warning("Failed to import archive from $source: ${e.message}")
+            null
+        }
     }
 
     private fun prune() {

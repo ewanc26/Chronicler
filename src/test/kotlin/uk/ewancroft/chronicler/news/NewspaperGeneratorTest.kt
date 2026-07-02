@@ -112,6 +112,44 @@ class NewspaperGeneratorTest {
     }
 
     @Test
+    fun `generate excludes system events from Active Players count`() {
+        store.record(event(EventType.PLAYER_JOIN, player = "ewanc26"))
+        // System-generated events (weather, explosions, etc.) use a sentinel playerName
+        // like "world" or "nature" and a blank playerUuid — they must not be counted
+        // as active players.
+        store.record(
+            ChronicleEvent(
+                EventType.EXPLOSION,
+                System.currentTimeMillis(),
+                "world",
+                "",
+                "world",
+                mapOf("source" to "creeper", "blocks" to "5"),
+            )
+        )
+        store.record(
+            ChronicleEvent(
+                EventType.STRUCTURE_GROW,
+                System.currentTimeMillis(),
+                "nature",
+                "",
+                "world",
+                mapOf("species" to "oak", "blocks" to "20"),
+            )
+        )
+        val gen = NewspaperGenerator(store, config, llmProvider = null, llmEnabled = false, logger = logger)
+        val newspaper = gen.generate(1, 0L, System.currentTimeMillis())
+
+        val stats = newspaper.sections.find { it.title == "Statistics" }
+        assertNotNull(stats)
+        val activePlayers = stats.stories.find { it.headline == "Active Players" }
+        assertNotNull(activePlayers)
+        assertEquals(listOf("ewanc26"), activePlayers.players)
+        assertTrue("world" !in activePlayers.players)
+        assertTrue("nature" !in activePlayers.players)
+    }
+
+    @Test
     fun `generate omits Statistics section when disabled`() {
         val cfg = config.copy(showStatistics = false)
         store.record(event(EventType.PLAYER_JOIN))

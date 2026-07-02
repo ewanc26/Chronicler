@@ -260,11 +260,10 @@ class Chronicler : JavaPlugin() {
         player.sendMessage(s.messages.delivering())
     }
 
-    fun publishNow() {
-        state?.publicationTask?.publishNow()
-    }
+    fun publishNow(): Boolean = state?.publicationTask?.publishNow() ?: false
 
-    fun createDraft(): Newspaper? = state?.publicationTask?.createDraft()
+    fun createDraft(onComplete: (Newspaper?) -> Unit): Boolean =
+        state?.publicationTask?.createDraftAsync(onComplete) ?: false
     fun getDraft(): Newspaper? = state?.publicationTask?.getDraft()
     fun publishDraft(): Boolean = state?.publicationTask?.publishDraft() ?: false
     fun removeDraftStory(section: Int, story: Int): Boolean = state?.publicationTask?.removeDraftStory(section, story) ?: false
@@ -286,13 +285,15 @@ class Chronicler : JavaPlugin() {
         return event
     }
 
-    fun previewNextIssue(): Newspaper? {
-        val s = state ?: return null
-        return s.generator.generate(
-            s.publicationTask.getIssueNumber() + 1,
-            s.publicationTask.getLastPublishTime(),
-            System.currentTimeMillis(),
-        )
+    fun previewNextIssue(onComplete: (Newspaper?) -> Unit): Boolean {
+        val s = state ?: return false
+        Bukkit.getAsyncScheduler().runNow(this) {
+            val issue = runCatching {
+                s.generator.generate(s.publicationTask.getIssueNumber() + 1, s.publicationTask.getLastPublishTime(), System.currentTimeMillis())
+            }.getOrNull()
+            Bukkit.getGlobalRegionScheduler().run(this) { onComplete(issue) }
+        }
+        return true
     }
 
     fun reloadPlugin() {
