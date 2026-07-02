@@ -109,7 +109,7 @@ class Chronicler : JavaPlugin() {
 
         val sessionStore = SessionStore(sessionFile).also { it.load() }
         val subscribeStore = SubscribeStore(subscribeFile).also { it.load() }
-        val archiveStore = ArchiveStore(archiveDir).also { it.loadAll() }
+        val archiveStore = ArchiveStore(archiveDir, cfg.archiveRetention, logger).also { it.loadAll() }
 
         val (llmProvider, llmAvailable) = if (cfg.llm.enabled) {
             val provider = createProvider(cfg.llm)
@@ -126,12 +126,13 @@ class Chronicler : JavaPlugin() {
             llmProvider = llmProvider?.takeIf { llmAvailable },
             llmEnabled = cfg.llm.enabled && llmAvailable,
             logger = logger,
+            privacyConfig = cfg.privacy,
         )
 
         val bookRenderer = BookRenderer(cfg.newspaper)
 
         val webRenderer = if (cfg.web.enabled) {
-            WebRenderer(cfg.web, cfg.newspaper, dataPath.resolve("web"))
+            WebRenderer(cfg.web, cfg.newspaper, dataPath.resolve("web"), archiveStore)
         } else {
             logger.info("Web view disabled.")
             null
@@ -262,6 +263,13 @@ class Chronicler : JavaPlugin() {
     fun publishNow() {
         state?.publicationTask?.publishNow()
     }
+
+    fun createDraft(): Newspaper? = state?.publicationTask?.createDraft()
+    fun getDraft(): Newspaper? = state?.publicationTask?.getDraft()
+    fun publishDraft(): Boolean = state?.publicationTask?.publishDraft() ?: false
+    fun removeDraftStory(section: Int, story: Int): Boolean = state?.publicationTask?.removeDraftStory(section, story) ?: false
+    fun editDraftStory(section: Int, story: Int, headline: String?, body: String?): Boolean =
+        state?.publicationTask?.editDraftStory(section, story, headline, body) ?: false
 
     fun recordTestEvent(type: EventType, sender: org.bukkit.command.CommandSender): ChronicleEvent? {
         val store = state?.eventStore ?: return null

@@ -135,4 +135,14 @@ class BookRendererTest {
 
         assertEquals(4, meta.pageCount, "Should be title + one page per article + footer")
     }
+
+    @Test
+    fun `long articles split without losing words`() {
+        val body = (1..80).joinToString(" ") { "word$it" }
+        val pages = BookRenderer.splitArticle(body, 80)
+
+        assertTrue(pages.size > 1)
+        assertTrue(pages.all { it.length <= 80 })
+        assertEquals(body, pages.joinToString(" "))
+    }
 }

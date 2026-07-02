@@ -14,6 +14,11 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 - **Dynamic Newspaper** — Generates a structured book with sections: Headlines, Breaking News, Obituaries, Achievements, Hunting Grounds, Exploration & Building, Economy & Trading, Social, Statistics
 - **LLM Integration** — Optional AI-powered article generation via Ollama, OpenAI-compatible APIs (OpenRouter, OpenAI), or Anthropic Claude; falls back to template summaries
 - **Web View** — Optional embedded HTTP server serves a styled HTML version of each issue with dark/light theme toggle and RSS feed
+- **Editorial Workflow** — Create, preview, edit, remove stories from, and approve persistent draft issues
+- **Newspaper Layout** — Ranked articles with configurable bylines, tone, section order, colours, and clean continuation pages
+- **Privacy Controls** — Exclude players and redact private messages, chat excerpts, and coordinates
+- **Archive & Search** — Retention policies, import/export, web issue navigation, permalinks, and full-text search
+- **Safe Updates** — Automatic GitHub release updates with mandatory SHA-256 verification
 - **PlaceholderAPI** — 13+ placeholders exposing issue stats, player playtime, login streaks
 - **Archived Issues** — Every issue is saved to disk and browsable via `/chronicler archive`
 - **Headline Ticker** — Periodic action-bar broadcasts of random headlines from the latest issue
@@ -34,7 +39,7 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 
 ## Installation
 
-1. Download the latest `Chronicler-1.3.0-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
+1. Download the latest `Chronicler-1.4.0-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
 2. Place the jar in your server's `plugins/` folder
 3. Restart the server
 4. Edit `plugins/Chronicler/config.yml` to your liking
@@ -93,6 +98,14 @@ llm:
 | `/chronicler subscribe` | `chronicler.use` | Toggle auto-delivery on/off |
 | `/chronicler archive list` | `chronicler.use` | List past issues |
 | `/chronicler archive read <#>` | `chronicler.admin` | Receive an old issue as a book |
+| `/chronicler archive export <#>` | `chronicler.admin` | Export an archived issue as JSON |
+| `/chronicler archive import <file>` | `chronicler.admin` | Import JSON from the plugin imports folder |
+| `/chronicler editor create` | `chronicler.admin` | Generate a persistent draft issue |
+| `/chronicler editor preview` | `chronicler.admin` | List indexed draft stories |
+| `/chronicler editor edit <section> <story> headline\|body <text>` | `chronicler.admin` | Edit draft copy |
+| `/chronicler editor remove <section> <story>` | `chronicler.admin` | Remove a draft story |
+| `/chronicler editor publish` | `chronicler.admin` | Approve and publish the draft |
+| `/chronicler diagnostics` | `chronicler.admin` | Show subsystem and updater health |
 | `/chronicler reload` | `chronicler.admin` | Reload configuration |
 | `/chronicler publish` | `chronicler.admin` | Force-publish a new issue now |
 
@@ -131,7 +144,7 @@ cd Chronicler
 ./gradlew build
 ```
 
-The compiled jar will be at `build/libs/Chronicler-1.3.0-all.jar`.
+The compiled jar will be at `build/libs/Chronicler-1.4.0-all.jar`.
 
 ## Testing
 

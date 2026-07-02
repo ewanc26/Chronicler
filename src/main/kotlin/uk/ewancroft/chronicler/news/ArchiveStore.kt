@@ -4,8 +4,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.logging.Logger
 
-class ArchiveStore(private val archiveDir: Path) {
+class ArchiveStore(
+    private val archiveDir: Path,
+    private val retention: Int = Int.MAX_VALUE,
+    private val logger: Logger = Logger.getLogger(ArchiveStore::class.java.name),
+) {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -21,7 +27,9 @@ class ArchiveStore(private val archiveDir: Path) {
                 Files.createDirectories(archiveDir)
                 val file = archiveDir.resolve("issue-${newspaper.issueNumber}.json")
                 file.toFile().writeText(json.encodeToString(newspaper))
-            } catch (_: Exception) {
+                prune()
+            } catch (e: Exception) {
+                logger.warning("Failed to archive issue #${newspaper.issueNumber}: ${e.message}")
             }
         }
     }
@@ -56,12 +64,14 @@ class ArchiveStore(private val archiveDir: Path) {
                                 val text = file.readText()
                                 val newspaper: Newspaper = json.decodeFromString(text)
                                 archives.add(newspaper)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                logger.warning("Skipping unreadable archive ${file.name}: ${e.message}")
                             }
                         }
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                logger.warning("Failed to load archive directory $archiveDir: ${e.message}")
             }
         }
     }
@@ -75,6 +85,29 @@ class ArchiveStore(private val archiveDir: Path) {
             } else null
         } catch (_: Exception) {
             null
+        }
+    }
+
+    fun exportIssue(number: Int, destination: Path): Boolean {
+        val source = archiveDir.resolve("issue-$number.json")
+        if (!Files.exists(source)) return false
+        Files.createDirectories(destination.parent)
+        Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING)
+        return true
+    }
+
+    fun importIssue(source: Path): Newspaper? {
+        val newspaper = json.decodeFromString<Newspaper>(Files.readString(source))
+        archive(newspaper)
+        return newspaper
+    }
+
+    private fun prune() {
+        val expired = archives.sortedByDescending { it.issueNumber }.drop(retention)
+        expired.forEach { issue ->
+            archives.remove(issue)
+            Files.deleteIfExists(archiveDir.resolve("issue-${issue.issueNumber}.json"))
+            logger.info("Pruned archived issue #${issue.issueNumber} (retention: $retention).")
         }
     }
 }

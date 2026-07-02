@@ -17,6 +17,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Calendar
 import java.util.logging.Level
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.logging.Logger
 
 class PublicationTask(
@@ -37,12 +39,15 @@ class PublicationTask(
     private var lastPublishTime = 0L
     private var latestBook: ItemStack? = null
     private var latestNewspaper: Newspaper? = null
+    private var draftNewspaper: Newspaper? = null
     private var scheduledTask: ScheduledTask? = null
     private val stateFile: Path = plugin.dataFolder.toPath().resolve("publish-state.json")
+    private val draftFile: Path = plugin.dataFolder.toPath().resolve("draft-issue.json")
     private val deliveredPlayers = mutableSetOf<String>()
 
     fun start() {
         loadState()
+        loadDraft()
 
         val backfilledEvents = store.allEvents().count { it.timestamp <= activationTime }
         if (issueNumber == 0 && lastPublishTime == 0L && backfilledEvents > 0) {
@@ -81,7 +86,53 @@ class PublicationTask(
     }
 
     fun publishNow() {
-        doPublish()
+        if (config.reviewRequired) createDraft() else doPublish()
+    }
+
+    fun createDraft(): Newspaper {
+        val number = issueNumber + 1
+        return generator.generate(number, lastPublishTime, System.currentTimeMillis()).also {
+            draftNewspaper = it
+            saveDraft()
+            logger.info("Created draft issue #$number with ${it.sections.sumOf { section -> section.stories.size }} stories; awaiting editor approval.")
+        }
+    }
+
+    fun getDraft(): Newspaper? = draftNewspaper
+
+    fun removeDraftStory(sectionIndex: Int, storyIndex: Int): Boolean {
+        val draft = draftNewspaper ?: return false
+        val section = draft.sections.getOrNull(sectionIndex) ?: return false
+        if (storyIndex !in section.stories.indices) return false
+        val sections = draft.sections.toMutableList()
+        sections[sectionIndex] = section.copy(stories = section.stories.filterIndexed { index, _ -> index != storyIndex })
+        draftNewspaper = draft.copy(sections = sections.filter { it.stories.isNotEmpty() })
+        saveDraft()
+        return true
+    }
+
+    fun editDraftStory(sectionIndex: Int, storyIndex: Int, headline: String? = null, body: String? = null): Boolean {
+        val draft = draftNewspaper ?: return false
+        val section = draft.sections.getOrNull(sectionIndex) ?: return false
+        val story = section.stories.getOrNull(storyIndex) ?: return false
+        val stories = section.stories.toMutableList()
+        stories[storyIndex] = story.copy(
+            headline = headline?.trim()?.take(60)?.ifBlank { story.headline } ?: story.headline,
+            body = body?.trim()?.ifBlank { story.body } ?: story.body,
+        )
+        val sections = draft.sections.toMutableList()
+        sections[sectionIndex] = section.copy(stories = stories)
+        draftNewspaper = draft.copy(sections = sections)
+        saveDraft()
+        return true
+    }
+
+    fun publishDraft(): Boolean {
+        val draft = draftNewspaper ?: return false
+        publishNewspaper(draft, draft.toTime, false)
+        draftNewspaper = null
+        Files.deleteIfExists(draftFile)
+        return true
     }
 
     fun getIssueNumber(): Int = issueNumber
@@ -144,6 +195,21 @@ class PublicationTask(
         try {
             logger.info("Starting publication of issue #$number with $eventCount events ($fromTime to $toTime).")
             val newspaper = generator.generate(number, fromTime, toTime)
+            publishNewspaper(newspaper, toTime, isIssueZero, startedAt, eventCount)
+        } catch (e: Exception) {
+            logger.log(Level.SEVERE, "Failed to publish issue #$number after ${System.currentTimeMillis() - startedAt}ms.", e)
+        }
+    }
+
+    private fun publishNewspaper(
+        newspaper: Newspaper,
+        toTime: Long,
+        isIssueZero: Boolean,
+        startedAt: Long = System.currentTimeMillis(),
+        eventCount: Int = store.eventsSince(lastPublishTime).count { it.timestamp <= toTime },
+    ) {
+        val number = newspaper.issueNumber
+        try {
             val book = bookRenderer.renderToBook(newspaper)
             val storyCount = newspaper.sections.sumOf { it.stories.size }
             logger.info("Rendered issue #$number: ${newspaper.sections.size} sections, $storyCount stories, ${book.itemMeta.let { it as org.bukkit.inventory.meta.BookMeta }.pageCount} book pages.")
@@ -176,6 +242,7 @@ class PublicationTask(
             logger.info("Published issue #$number in ${System.currentTimeMillis() - startedAt}ms; consumed $eventCount events.")
         } catch (e: Exception) {
             logger.log(Level.SEVERE, "Failed to publish issue #$number after ${System.currentTimeMillis() - startedAt}ms.", e)
+            throw e
         }
     }
 
@@ -201,6 +268,28 @@ class PublicationTask(
             Files.writeString(stateFile, "$issueNumber\n$lastPublishTime")
         } catch (e: Exception) {
             logger.log(Level.SEVERE, "Failed to save publication state to $stateFile.", e)
+        }
+    }
+
+    private fun loadDraft() {
+        if (!Files.exists(draftFile)) return
+        try {
+            draftNewspaper = Json { ignoreUnknownKeys = true }.decodeFromString<Newspaper>(Files.readString(draftFile))
+            logger.info("Restored draft issue #${draftNewspaper?.issueNumber} from disk.")
+        } catch (e: Exception) {
+            logger.log(Level.WARNING, "Failed to restore draft from $draftFile; preserving the unreadable file for recovery.", e)
+        }
+    }
+
+    private fun saveDraft() {
+        val draft = draftNewspaper ?: return
+        try {
+            Files.createDirectories(draftFile.parent)
+            val temporary = draftFile.resolveSibling("${draftFile.fileName}.tmp")
+            Files.writeString(temporary, Json { prettyPrint = true }.encodeToString(draft))
+            Files.move(temporary, draftFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Exception) {
+            logger.log(Level.SEVERE, "Failed to save draft issue #${draft.issueNumber}.", e)
         }
     }
 

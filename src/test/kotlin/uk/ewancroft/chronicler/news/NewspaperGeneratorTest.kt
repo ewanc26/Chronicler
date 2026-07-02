@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import uk.ewancroft.chronicler.config.NewspaperConfig
+import uk.ewancroft.chronicler.config.PrivacyConfig
 import java.nio.file.Path
 import java.util.logging.Logger
 import kotlin.test.assertEquals
@@ -164,5 +165,26 @@ class NewspaperGeneratorTest {
         assertTrue("Hunting Grounds" in titles)
         assertTrue("Exploration & Building" in titles)
         assertTrue("Statistics" in titles)
+    }
+
+    @Test
+    fun `privacy excludes opted out players and private messages`() {
+        store.record(event(EventType.DEATH, player = "hidden", details = mapOf("message" to "hidden fell")))
+        store.record(event(EventType.MESSAGE_SENT, player = "visible"))
+        val privacy = PrivacyConfig(false, false, false, setOf("hidden"))
+        val newspaper = NewspaperGenerator(store, config, null, false, logger, privacy).generate(1, 0L, System.currentTimeMillis())
+
+        assertTrue(newspaper.sections.flatMap { it.stories }.none { "hidden" in it.players })
+        assertTrue(newspaper.sections.none { it.title == "Social" })
+    }
+
+    @Test
+    fun `configured byline and section ordering are applied`() {
+        store.record(event(EventType.DEATH, details = mapOf("message" to "fell")))
+        val ordered = config.copy(byline = "Server Desk", sectionOrder = listOf("Statistics", "Headlines"))
+        val newspaper = NewspaperGenerator(store, ordered, null, false, logger).generate(1, 0L, System.currentTimeMillis())
+
+        assertEquals("Statistics", newspaper.sections.first().title)
+        assertTrue(newspaper.sections.flatMap { it.stories }.all { it.byline == "Server Desk" })
     }
 }

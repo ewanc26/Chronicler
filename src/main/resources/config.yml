@@ -1,5 +1,5 @@
 # Chronicler configuration
-config-version: 1
+config-version: 2
 
 # Master toggle.
 enabled: true
@@ -83,6 +83,33 @@ newspaper:
   stories-per-section: 5
   # Include raw statistics page.
   show-statistics: true
+  # Default reporter credit and LLM editorial style.
+  byline: "Chronicler Staff"
+  tone: "dry, factual, and slightly humorous"
+  # Long copy is split cleanly across consecutive book pages.
+  max-article-characters: 900
+  # Optional exact section ordering; omitted sections follow afterwards.
+  section-order: []
+  title-page-text: "A chronicle of events past."
+  colors:
+    accent: "#6B3E00"
+    primary: "#1F1A14"
+    secondary: "#3D342A"
+    muted: "#5C4F40"
+
+# Hold generated issues as drafts until an administrator publishes them.
+editor:
+  review-required: false
+
+archive:
+  # Oldest issues beyond this count are removed after publication.
+  retention: 50
+
+privacy:
+  include-private-messages: false
+  include-chat-excerpts: false
+  include-coordinates: false
+  excluded-players: []
 
 # Headline ticker — periodically broadcasts a headline from the current issue.
 ticker:

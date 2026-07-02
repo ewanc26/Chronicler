@@ -4,7 +4,7 @@ plugins {
     id 'com.gradleup.shadow' version '9.4.3'
 }
 
-version = '1.3.0'
+version = '1.4.0'
 
 repositories {
     mavenCentral()
@@ -68,6 +68,19 @@ tasks.named('test') {
 }
 
 build.dependsOn shadowJar
+
+tasks.register('releaseChecksum') {
+    dependsOn shadowJar
+    doLast {
+        ant.checksum(
+            file: tasks.shadowJar.archiveFile.get().asFile,
+            algorithm: 'SHA-256',
+            fileext: '.sha256',
+        )
+    }
+}
+
+build.dependsOn releaseChecksum
 
 clean {
     delete 'build'

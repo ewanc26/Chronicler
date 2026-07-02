@@ -1,6 +1,7 @@
 package uk.ewancroft.chronicler.news
 
 import uk.ewancroft.chronicler.config.NewspaperConfig
+import uk.ewancroft.chronicler.config.PrivacyConfig
 import uk.ewancroft.chronicler.llm.ArticleResult
 import uk.ewancroft.chronicler.llm.LlmProvider
 import java.util.logging.Logger
@@ -11,11 +12,18 @@ class NewspaperGenerator(
     private val llmProvider: LlmProvider?,
     private val llmEnabled: Boolean,
     private val logger: Logger,
+    private val privacyConfig: PrivacyConfig = PrivacyConfig(false, false, false, emptySet()),
 ) {
     private val maxStories = newspaperConfig.storiesPerSection
 
     fun generate(issueNumber: Int, fromTime: Long, toTime: Long): Newspaper {
-        val events = store.eventsSince(fromTime).filter { it.timestamp <= toTime }
+        val events = store.eventsSince(fromTime)
+            .asSequence()
+            .filter { it.timestamp <= toTime }
+            .filterNot { it.playerName.lowercase() in privacyConfig.excludedPlayers }
+            .filterNot { it.type == EventType.MESSAGE_SENT && !privacyConfig.includePrivateMessages }
+            .map(::redactEvent)
+            .toList()
         logger.info("Generating issue #$issueNumber from ${events.size} events ($fromTime to $toTime).")
         val sections = mutableListOf<NewspaperSection>()
 
@@ -37,9 +45,10 @@ class NewspaperGenerator(
             sections.add(generateStatistics(events))
         }
 
+        val order = newspaperConfig.sectionOrder.mapIndexed { index, title -> title.lowercase() to index }.toMap()
         val structuredSections = sections.map { section ->
-            section.copy(stories = section.stories.map(::structureStory))
-        }
+            section.copy(stories = section.stories.map(::structureStory).sortedByDescending(::importanceScore))
+        }.sortedWith(compareBy({ order[it.title.lowercase()] ?: Int.MAX_VALUE }, { it.title }))
         logger.info("Generated issue #$issueNumber with ${structuredSections.size} sections and ${structuredSections.sumOf { it.stories.size }} stories.")
         return Newspaper(issueNumber, fromTime, toTime, structuredSections)
     }
@@ -746,7 +755,7 @@ class NewspaperGenerator(
     ): List<Story>? {
         if (!llmEnabled || llmProvider == null || summary.isBlank()) return null
 
-        val systemPrompt = "You are the editor of a Minecraft server newspaper. Write accurate, concise news copy in an inverted-pyramid structure with a factual lead and supporting detail. Use a dry, slightly humorous tone, but never invent facts or quotes.\n\nEach response must be exactly:\n---HEADLINE\n(headline, max 60 chars)\n---BODY\n(2-4 complete sentences)"
+        val systemPrompt = "You are the editor of a Minecraft server newspaper. Write accurate, concise news copy in an inverted-pyramid structure with a factual lead and supporting detail. The tone is ${newspaperConfig.tone}, but never invent facts or quotes. Keep the body below ${newspaperConfig.maxArticleCharacters} characters.\n\nEach response must be exactly:\n---HEADLINE\n(headline, max 60 chars)\n---BODY\n(2-4 complete sentences)"
 
         return try {
             logger.fine("Requesting LLM article for section '$sectionTitle' from ${events.size} events.")
@@ -769,6 +778,23 @@ class NewspaperGenerator(
         val headline = story.headline.trim().replace(Regex("[\\r\\n]+"), " ").take(60).ifBlank { "News Brief" }
         val body = story.body.trim().replace(Regex("\\s+"), " ").ifBlank { "No further details were available at press time." }
         val completeBody = if (body.last() in ".!?") body else "$body."
-        return story.copy(headline = headline, body = completeBody)
+        return story.copy(headline = headline, body = completeBody, byline = newspaperConfig.byline)
+    }
+
+    private fun redactEvent(event: ChronicleEvent): ChronicleEvent {
+        val details = event.details.filterKeys { key ->
+            val normalized = key.lowercase()
+            (privacyConfig.includeChatExcerpts || normalized !in setOf("text", "message", "chat")) &&
+                (privacyConfig.includeCoordinates || normalized !in setOf("x", "y", "z", "coordinates", "location"))
+        }
+        return event.copy(details = details)
+    }
+
+    private fun importanceScore(story: Story): Int = when (story.eventType) {
+        EventType.END_ENTER, EventType.FIRST_JOIN, EventType.FIRST_DEATH, EventType.RAID -> 100
+        EventType.ADVANCEMENT, EventType.MILESTONE, EventType.MILESTONE_PLAYTIME, EventType.MILESTONE_LOGIN_STREAK -> 80
+        EventType.PVP_KILL, EventType.DEATH, EventType.EXPLOSION, EventType.LIGHTNING -> 60
+        EventType.BIOME_DISCOVERY, EventType.ORE_DISCOVERY, EventType.TRADE -> 40
+        else -> 20
     }
 }

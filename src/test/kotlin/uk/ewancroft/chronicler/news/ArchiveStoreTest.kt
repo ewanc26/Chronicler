@@ -7,6 +7,8 @@ import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ArchiveStoreTest {
 
@@ -100,5 +102,26 @@ class ArchiveStoreTest {
     fun `archive handles multiple issues`() {
         repeat(100) { i -> archive.archive(newspaper(i + 1)) }
         assertEquals(100, archive.getAll().size)
+    }
+
+    @Test
+    fun `retention removes oldest archives`() {
+        val retained = ArchiveStore(tempDir.resolve("retained"), retention = 2)
+        retained.archive(newspaper(1))
+        retained.archive(newspaper(2))
+        retained.archive(newspaper(3))
+
+        assertEquals(listOf(3, 2), retained.getAll().map { it.issueNumber })
+        assertFalse(java.nio.file.Files.exists(tempDir.resolve("retained/issue-1.json")))
+    }
+
+    @Test
+    fun `issues can be exported and imported`() {
+        archive.archive(newspaper(7))
+        val export = tempDir.resolve("exports/issue-7.json")
+        assertTrue(archive.exportIssue(7, export))
+
+        val imported = ArchiveStore(tempDir.resolve("imported")).importIssue(export)
+        assertEquals(7, imported?.issueNumber)
     }
 }

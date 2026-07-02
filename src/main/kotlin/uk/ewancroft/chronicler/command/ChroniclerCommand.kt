@@ -34,6 +34,8 @@ class ChroniclerCommand(
             "stats" -> showStats(sender, args)
             "subscribe" -> toggleSubscribe(sender)
             "archive" -> showArchive(sender, args)
+            "editor" -> editor(sender, args)
+            "diagnostics" -> diagnostics(sender)
             "test" -> runTestCommand(sender, args)
             "help" -> { sendHelp(sender); true }
             else -> { sendHelp(sender); true }
@@ -47,14 +49,17 @@ class ChroniclerCommand(
         args: Array<out String>,
     ): List<String> {
         if (args.size == 1) {
-            val cmds = listOf("read", "web", "latest", "reload", "status", "publish", "stats", "subscribe", "archive", "test", "help")
+            val cmds = listOf("read", "web", "latest", "reload", "status", "publish", "stats", "subscribe", "archive", "editor", "diagnostics", "test", "help")
             return cmds.filter { it.startsWith(args[0], true) }
         }
         if (args[0].lowercase() == "stats" && args.size == 2) {
             return Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[1], true) }
         }
         if (args[0].lowercase() == "archive" && args.size == 2) {
-            return listOf("list", "read").filter { it.startsWith(args[1], true) }
+            return listOf("list", "read", "export", "import").filter { it.startsWith(args[1], true) }
+        }
+        if (args[0].lowercase() == "editor" && args.size == 2) {
+            return listOf("create", "preview", "remove", "edit", "publish").filter { it.startsWith(args[1], true) }
         }
         if (args[0].lowercase() == "test" && args.size == 2) {
             return listOf("event", "events", "preview").filter { it.startsWith(args[1], true) }
@@ -294,7 +299,83 @@ class ChroniclerCommand(
             return true
         }
 
+        if (args.size >= 3 && args[1].lowercase() == "export") {
+            if (!sender.hasPermission("chronicler.admin")) return deny(sender)
+            val issue = args[2].toIntOrNull() ?: return true.also { sender.sendMessage(messages.archiveUsage()) }
+            val target = plugin.dataFolder.toPath().resolve("exports/issue-$issue.json")
+            val exported = runCatching { archive.exportIssue(issue, target) }.getOrDefault(false)
+            sender.sendMessage(net.kyori.adventure.text.Component.text(if (exported) "Exported issue #$issue to $target" else "Issue #$issue was not found."))
+            return true
+        }
+
+        if (args.size >= 3 && args[1].lowercase() == "import") {
+            if (!sender.hasPermission("chronicler.admin")) return deny(sender)
+            val safeName = java.nio.file.Path.of(args[2]).fileName.toString()
+            val source = plugin.dataFolder.toPath().resolve("imports").resolve(safeName)
+            val imported = runCatching { archive.importIssue(source) }.getOrNull()
+            sender.sendMessage(net.kyori.adventure.text.Component.text(imported?.let { "Imported issue #${it.issueNumber}." } ?: "Import failed; place a valid archive JSON in ${source.parent}."))
+            return true
+        }
+
         sender.sendMessage(messages.archiveUsage())
+        return true
+    }
+
+    private fun editor(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("chronicler.admin")) return deny(sender)
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        when (args.getOrNull(1)?.lowercase()) {
+            "create" -> {
+                val draft = plugin.createDraft()
+                sender.sendMessage(mm.deserialize(draft?.let { "<green>Created draft issue #${it.issueNumber}.</green>" } ?: "<red>Plugin not ready.</red>"))
+            }
+            "preview" -> {
+                val draft = plugin.getDraft()
+                if (draft == null) sender.sendMessage(mm.deserialize("<yellow>No draft exists.</yellow>"))
+                else draft.sections.forEachIndexed { sectionIndex, section ->
+                    sender.sendMessage(mm.deserialize("<gold>[$sectionIndex] ${section.title}</gold>"))
+                    section.stories.forEachIndexed { storyIndex, story -> sender.sendMessage(mm.deserialize(" <gray>[$storyIndex] <white>${story.headline}</white></gray>")) }
+                }
+            }
+            "remove" -> {
+                val ok = plugin.removeDraftStory(args.getOrNull(2)?.toIntOrNull() ?: -1, args.getOrNull(3)?.toIntOrNull() ?: -1)
+                sender.sendMessage(mm.deserialize(if (ok) "<green>Story removed.</green>" else "<red>Invalid draft story index.</red>"))
+            }
+            "edit" -> {
+                val section = args.getOrNull(2)?.toIntOrNull() ?: -1
+                val story = args.getOrNull(3)?.toIntOrNull() ?: -1
+                val field = args.getOrNull(4)?.lowercase()
+                val value = args.drop(5).joinToString(" ")
+                val ok = when (field) {
+                    "headline" -> plugin.editDraftStory(section, story, value, null)
+                    "body" -> plugin.editDraftStory(section, story, null, value)
+                    else -> false
+                }
+                sender.sendMessage(mm.deserialize(if (ok) "<green>Story updated.</green>" else "<red>Usage: /chronicler editor edit <section> <story> headline|body <text></red>"))
+            }
+            "publish" -> sender.sendMessage(mm.deserialize(if (plugin.publishDraft()) "<green>Draft published.</green>" else "<yellow>No draft exists.</yellow>"))
+            else -> sender.sendMessage(mm.deserialize("<yellow>Usage: /chronicler editor create|preview|remove|edit|publish</yellow>"))
+        }
+        return true
+    }
+
+    private fun diagnostics(sender: CommandSender): Boolean {
+        if (!sender.hasPermission("chronicler.admin")) return deny(sender)
+        val status = plugin.getStatus()
+        val archiveCount = plugin.getArchiveStore()?.getAll()?.size ?: 0
+        val draft = plugin.getDraft()
+        val dataWritable = java.nio.file.Files.isWritable(plugin.dataFolder.toPath())
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        sender.sendMessage(mm.deserialize("<gold>Chronicler Diagnostics</gold>"))
+        sender.sendMessage(mm.deserialize(" <gray>Version: <white>${plugin.pluginMeta.version}</white>; events: <white>${status.eventCount}</white>; archives: <white>$archiveCount</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>LLM: <white>${status.llmAvailable}</white>; web: <white>${status.webEnabled}:${status.webPort}</white>; data writable: <white>$dataWritable</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Draft: <white>${draft?.let { "#${it.issueNumber}, ${it.sections.sumOf { section -> section.stories.size }} stories" } ?: "none"}</white></gray>"))
+        sender.sendMessage(mm.deserialize(" <gray>Updater: <white>${uk.ewancroft.chronicler.util.UpdateChecker.status()}</white></gray>"))
+        return true
+    }
+
+    private fun deny(sender: CommandSender): Boolean {
+        sender.sendMessage(messages.noPermission())
         return true
     }
 
@@ -312,6 +393,8 @@ class ChroniclerCommand(
             sender.sendMessage(messages.helpPublish())
             val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
             sender.sendMessage(mm.deserialize(" <green>/chronicler test</green> <gray>— Event and issue diagnostics</gray>"))
+            sender.sendMessage(mm.deserialize(" <green>/chronicler editor</green> <gray>— Review and publish draft issues</gray>"))
+            sender.sendMessage(mm.deserialize(" <green>/chronicler diagnostics</green> <gray>— Check subsystem health</gray>"))
         }
     }
 }

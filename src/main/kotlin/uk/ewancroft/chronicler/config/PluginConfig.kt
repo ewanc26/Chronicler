@@ -43,6 +43,22 @@ data class NewspaperConfig(
     val author: String,
     val storiesPerSection: Int,
     val showStatistics: Boolean,
+    val byline: String = "Chronicler Staff",
+    val tone: String = "dry, factual, and slightly humorous",
+    val maxArticleCharacters: Int = 900,
+    val sectionOrder: List<String> = emptyList(),
+    val titlePageText: String = "A chronicle of events past.",
+    val accentColor: Int = 0x6B3E00,
+    val primaryTextColor: Int = 0x1F1A14,
+    val secondaryTextColor: Int = 0x3D342A,
+    val mutedTextColor: Int = 0x5C4F40,
+)
+
+data class PrivacyConfig(
+    val includePrivateMessages: Boolean,
+    val includeChatExcerpts: Boolean,
+    val includeCoordinates: Boolean,
+    val excludedPlayers: Set<String>,
 )
 
 data class WebConfig(
@@ -67,6 +83,9 @@ class PluginConfig(private val config: FileConfiguration) {
     val papiEnabled: Boolean
     val bStatsEnabled: Boolean
     val autoUpdateEnabled: Boolean
+    val privacy: PrivacyConfig
+    val archiveRetention: Int
+    val reviewRequired: Boolean
 
     init {
         enabled = config.getBoolean("enabled", true)
@@ -115,6 +134,15 @@ class PluginConfig(private val config: FileConfiguration) {
             author = config.getString("newspaper.author", "Chronicler") ?: "Chronicler",
             storiesPerSection = config.getInt("newspaper.stories-per-section", 5).coerceIn(1, 20),
             showStatistics = config.getBoolean("newspaper.show-statistics", true),
+            byline = config.getString("newspaper.byline", "Chronicler Staff") ?: "Chronicler Staff",
+            tone = config.getString("newspaper.tone", "dry, factual, and slightly humorous") ?: "dry, factual, and slightly humorous",
+            maxArticleCharacters = config.getInt("newspaper.max-article-characters", 900).coerceIn(200, 4000),
+            sectionOrder = config.getStringList("newspaper.section-order"),
+            titlePageText = config.getString("newspaper.title-page-text", "A chronicle of events past.") ?: "A chronicle of events past.",
+            accentColor = color(config.getString("newspaper.colors.accent"), 0x6B3E00),
+            primaryTextColor = color(config.getString("newspaper.colors.primary"), 0x1F1A14),
+            secondaryTextColor = color(config.getString("newspaper.colors.secondary"), 0x3D342A),
+            mutedTextColor = color(config.getString("newspaper.colors.muted"), 0x5C4F40),
         )
         web = WebConfig(
             enabled = config.getBoolean("web.enabled", true),
@@ -123,13 +151,23 @@ class PluginConfig(private val config: FileConfiguration) {
         )
         bStatsEnabled = config.getBoolean("bstats-enabled", true)
         autoUpdateEnabled = config.getBoolean("auto-update.enabled", true)
-        configVersion = config.getInt("config-version", 1)
+        archiveRetention = config.getInt("archive.retention", 50).coerceAtLeast(1)
+        reviewRequired = config.getBoolean("editor.review-required", false)
+        privacy = PrivacyConfig(
+            includePrivateMessages = config.getBoolean("privacy.include-private-messages", false),
+            includeChatExcerpts = config.getBoolean("privacy.include-chat-excerpts", false),
+            includeCoordinates = config.getBoolean("privacy.include-coordinates", false),
+            excludedPlayers = config.getStringList("privacy.excluded-players").map { it.lowercase() }.toSet(),
+        )
+        configVersion = config.getInt("config-version", 2)
         migrateConfig()
     }
 
     private fun migrateConfig() {
         val version = config.getInt("config-version", 0)
-        if (version >= 1) return
-        config.set("config-version", 1)
+        if (version >= 2) return
+        config.set("config-version", 2)
     }
+
+    private fun color(value: String?, fallback: Int): Int = value?.removePrefix("#")?.toIntOrNull(16) ?: fallback
 }
