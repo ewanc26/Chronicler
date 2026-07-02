@@ -48,6 +48,7 @@ class PublicationTask(
     fun start() {
         loadState()
         loadDraft()
+        restoreLatestIssue()
 
         val backfilledEvents = store.allEvents().count { it.timestamp <= activationTime }
         if (issueNumber == 0 && lastPublishTime == 0L && backfilledEvents > 0) {
@@ -76,6 +77,18 @@ class PublicationTask(
         )
 
         logger.info("Publication task scheduled (${config.schedule.lowercase()})")
+    }
+
+    private fun restoreLatestIssue() {
+        val newspaper = archiveStore?.latest(1)?.firstOrNull() ?: return
+        try {
+            latestNewspaper = newspaper
+            latestBook = bookRenderer.renderToBook(newspaper)
+            webRenderer?.renderAndServe(newspaper)
+            logger.info("Restored issue #${newspaper.issueNumber} from the archive (${newspaper.sections.sumOf { it.stories.size }} stories).")
+        } catch (e: Exception) {
+            logger.log(Level.WARNING, "Failed to restore archived issue #${newspaper.issueNumber}.", e)
+        }
     }
 
     fun stop() {
