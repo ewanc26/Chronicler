@@ -1,0 +1,55 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.21'
+    id 'com.gradleup.shadow' version '9.4.3'
+}
+
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+}
+
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:26.1.2.build.72-stable'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.3.21'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
+    implementation 'org.bstats:bstats-bukkit:3.1.0'
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(26))
+    }
+    withSourcesJar()
+}
+
+kotlin {
+    jvmToolchain(26)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+}
+
+shadowJar {
+    archiveBaseName = 'Chronicler'
+    archiveVersion = project.version
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    relocate 'org.bstats', 'uk.ewancroft.chronicler.libs.bstats'
+    exclude 'org/bukkit/**', 'io/papermc/**', 'net/kyori/**'
+    exclude 'META-INF/versions/**', 'META-INF/libraries/**'
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}
+
+build.dependsOn shadowJar
+
+clean {
+    delete 'build'
+}
