@@ -6,29 +6,35 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 
 - **Death & PvP Tracking** — Records deaths, PvP kills, and mob kills with causes
 - **Advancement Tracking** — Captures every advancement earned by players
-- **Building & Exploration** — Tracks blocks placed/broken (non-natural), biome discoveries
-- **Social Tracking** — Join/leave events, session length, login streaks
+- **Building & Exploration** — Tracks blocks placed/broken (non-natural), biome discoveries, ore discoveries, distance milestones
+- **Social & Messaging** — Join/leave events, private message tracking (/msg, /tell, /w)
 - **Session Tracking** — Cumulative playtime, session counts, daily login streaks with milestones
-- **Dynamic Newspaper** — Generates a structured book with sections: Headlines, Obituaries, Achievements, Hunting Grounds, Exploration & Building, Statistics
+- **Economy Tracking** — Detects Vault at runtime, records transactions in newspaper
+- **Breaking News** — Special coverage when players first enter The End
+- **Dynamic Newspaper** — Generates a structured book with sections: Headlines, Breaking News, Obituaries, Achievements, Hunting Grounds, Exploration & Building, Economy & Trading, Social, Statistics
 - **LLM Integration** — Optional AI-powered article generation via Ollama, OpenAI-compatible APIs (OpenRouter, OpenAI), or Anthropic Claude; falls back to template summaries
-- **Web View** — Optional embedded HTTP server serves a styled HTML version of each issue
+- **Web View** — Optional embedded HTTP server serves a styled HTML version of each issue with dark/light theme toggle and RSS feed
 - **PlaceholderAPI** — 13+ placeholders exposing issue stats, player playtime, login streaks
 - **Archived Issues** — Every issue is saved to disk and browsable via `/chronicler archive`
 - **Headline Ticker** — Periodic action-bar broadcasts of random headlines from the latest issue
 - **Issue #0** — On first run, any backlogged events from before the plugin was installed are automatically compiled into issue #0
-- **Auto-Delivery** — Each new issue spawns directly into every online player's inventory (drops at feet if full)
-- **bStats Metrics** — Anonymous usage statistics
+- **Auto-Delivery** — Each new issue spawns directly into every online player's inventory (drops at feet if full); players can opt out with `/chronicler subscribe`
+- **Locale Support** — All messages customizable via `messages.yml` (MiniMessage format)
+- **bStats Metrics** — Anonymous usage statistics (configurable)
+- **Paper Plugin Support** — Includes `paper-plugin.yml` with soft dependency declarations for PlaceholderAPI and Vault
+- **Update Checker** — Checks GitHub for newer releases on startup
 
 ## Requirements
 
 - **Server:** Paper 1.21.5+ (API 26.1.2.build.72-stable)
 - **Java:** 26+
 - **Optional:** [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) for placeholder expansion
+- **Optional:** [Vault](https://www.spigotmc.org/resources/vault.34315/) for economy tracking
 - **Optional:** Ollama, OpenAI, OpenRouter, or Anthropic API key for LLM articles
 
 ## Installation
 
-1. Download the latest `Chronicler-1.0.0-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
+1. Download the latest `Chronicler-1.2.1-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
 2. Place the jar in your server's `plugins/` folder
 3. Restart the server
 4. Edit `plugins/Chronicler/config.yml` to your liking
@@ -56,9 +62,13 @@ tracking:
   blocks: true
   exploration: true
   social: true
+  economy: true
 
 # Maximum stored events before pruning
 event-limit: 500
+
+# bStats metrics
+bstats-enabled: true
 
 # LLM article generation (set enabled: false for template-only mode)
 llm:
@@ -70,24 +80,6 @@ llm:
   ollama-url: http://localhost:11434
   timeout-seconds: 30
   system-prompt: "You are the editor of \"{series_title}\"..."
-
-# Newspaper appearance
-newspaper:
-  title: "The Weekly Chronicle"
-  author: "Chronicler"
-  stories-per-section: 5
-  show-statistics: true
-
-# Headline ticker & placeholders
-ticker:
-  interval-ticks: 1200    # 60 seconds; 0 to disable
-  papi-enabled: true
-
-# Web view
-web:
-  enabled: true
-  port: 8080
-  write-files: true
 ```
 
 ## Commands
@@ -98,11 +90,11 @@ web:
 | `/chronicler web` | `chronicler.use` | Show the web view URL |
 | `/chronicler status` | `chronicler.admin` | Show plugin status |
 | `/chronicler stats <player>` | `chronicler.use` | View a player's tracked stats |
+| `/chronicler subscribe` | `chronicler.use` | Toggle auto-delivery on/off |
 | `/chronicler archive list` | `chronicler.use` | List past issues |
 | `/chronicler archive read <#>` | `chronicler.admin` | Receive an old issue as a book |
 | `/chronicler reload` | `chronicler.admin` | Reload configuration |
 | `/chronicler publish` | `chronicler.admin` | Force-publish a new issue now |
-| `/chronicler help` | `chronicler.use` | Show help |
 
 Alias: `/clr`
 
@@ -139,7 +131,7 @@ cd Chronicler
 ./gradlew build
 ```
 
-The compiled jar will be at `build/libs/Chronicler-1.0.0-all.jar`.
+The compiled jar will be at `build/libs/Chronicler-1.2.1-all.jar`.
 
 ## Testing
 
@@ -151,8 +143,10 @@ The compiled jar will be at `build/libs/Chronicler-1.0.0-all.jar`.
 
 - `plugins/Chronicler/events.json` — Event buffer (JSON, kotlinx-serialization)
 - `plugins/Chronicler/sessions.json` — Per-player session data
+- `plugins/Chronicler/subscriptions.json` — Per-player subscription preferences
 - `plugins/Chronicler/publish-state.json` — Last publish time and issue number
 - `plugins/Chronicler/archive/issue-*.json` — Archived issues
+- `plugins/Chronicler/messages.yml` — Localized message strings (MiniMessage)
 
 ## License
 
