@@ -1,0 +1,79 @@
+package uk.ewancroft.chronicler.tracker
+
+import org.bukkit.event.EventHandler
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerAdvancementDoneEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.advancement.Advancement
+import uk.ewancroft.chronicler.config.TrackingConfig
+import uk.ewancroft.chronicler.news.ChronicleEvent
+import uk.ewancroft.chronicler.news.EventStore
+import uk.ewancroft.chronicler.news.EventType
+import java.util.UUID
+
+class MilestoneTracker(
+    private val store: EventStore,
+    private val tracking: TrackingConfig,
+) : Listener {
+
+    private val seenPlayers = mutableSetOf<UUID>()
+
+    @EventHandler
+    fun onPlayerJoin(event: PlayerJoinEvent) {
+        val player = event.player
+        val uuid = player.uniqueId
+
+        if (!seenPlayers.contains(uuid)) {
+            seenPlayers.add(uuid)
+            store.record(
+                ChronicleEvent(
+                    type = EventType.FIRST_JOIN,
+                    timestamp = System.currentTimeMillis(),
+                    playerName = player.name,
+                    playerUuid = uuid.toString(),
+                    world = player.world.name,
+                    details = mapOf("firstJoin" to "true"),
+                )
+            )
+        }
+
+        if (tracking.social) {
+            store.record(
+                ChronicleEvent(
+                    type = EventType.PLAYER_JOIN,
+                    timestamp = System.currentTimeMillis(),
+                    playerName = player.name,
+                    playerUuid = uuid.toString(),
+                    world = player.world.name,
+                )
+            )
+        }
+    }
+
+    @EventHandler
+    fun onAdvancement(event: PlayerAdvancementDoneEvent) {
+        if (!tracking.advancements) return
+        val player = event.player
+        val adv = event.advancement
+        val key = adv.key
+        val namespace = key.namespace
+        val path = key.value
+
+        if (namespace != "minecraft") return
+        if (path.startsWith("recipes/")) return
+
+        store.record(
+            ChronicleEvent(
+                type = EventType.ADVANCEMENT,
+                timestamp = System.currentTimeMillis(),
+                playerName = player.name,
+                playerUuid = player.uniqueId.toString(),
+                world = player.world.name,
+                details = mapOf(
+                    "advancement" to path,
+                    "displayName" to (adv.displayName()?.toString() ?: path),
+                ),
+            )
+        )
+    }
+}
