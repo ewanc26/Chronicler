@@ -31,7 +31,7 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 
 ## Requirements
 
-- **Server:** Paper 1.21.5+ (API 26.1.2.build.72-stable)
+- **Server:** A supported Paper build on the current API line
 - **Java:** 26+
 - **Optional:** [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) for placeholder expansion
 - **Optional:** [Vault](https://www.spigotmc.org/resources/vault.34315/) for economy tracking
@@ -39,7 +39,7 @@ A PaperMC plugin that tracks server events and generates a dynamic in-game newsp
 
 ## Installation
 
-1. Download the latest `Chronicler-1.4.0-all.jar` from the [releases page](https://github.com/ewanc26/Chronicler/releases)
+1. Download the latest release jar from the [releases page](https://github.com/ewanc26/Chronicler/releases)
 2. Place the jar in your server's `plugins/` folder
 3. Restart the server
 4. Edit `plugins/Chronicler/config.yml` to your liking
@@ -144,7 +144,7 @@ cd Chronicler
 ./gradlew build
 ```
 
-The compiled jar will be at `build/libs/Chronicler-1.4.0-all.jar`.
+The compiled jar will be in `build/libs/` with the current release name.
 
 ## Testing
 
