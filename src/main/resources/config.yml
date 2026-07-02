@@ -30,11 +30,18 @@ event-limit: 500
 
 # LLM configuration for article generation.
 # If disabled, falls back to template-based summaries.
+# Providers: ollama, openai (works with OpenRouter, OpenAI, any OpenAI-compatible API), anthropic
 llm:
   enabled: true
   provider: ollama
-  url: http://localhost:11434
   model: llama3.2
+  # API key for providers that require it (openai, anthropic).
+  # Get one from https://openrouter.ai/keys for OpenRouter.
+  api-key: ""
+  # Base URL for OpenAI-compatible providers (OpenRouter, OpenAI, etc.).
+  base-url: https://openrouter.ai/api/v1
+  # Base URL for Ollama (only used when provider is ollama).
+  ollama-url: http://localhost:11434
   timeout-seconds: 30
   # System prompt for the LLM (controls tone and style).
   # Available variables: {series_title}, {server_name}

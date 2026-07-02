@@ -1,5 +1,6 @@
 package uk.ewancroft.chronicler.task
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bukkit.Bukkit
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
@@ -18,7 +19,7 @@ class PublicationTask(
     private val store: EventStore,
     private val generator: NewspaperGenerator,
     private val bookRenderer: BookRenderer,
-    private val webRenderer: WebRenderer,
+    private val webRenderer: WebRenderer?,
     private val logger: Logger,
 ) {
 
@@ -26,7 +27,7 @@ class PublicationTask(
     private var lastPublishTime = System.currentTimeMillis()
     private var latestBook: ItemStack? = null
     private var latestNewspaper: Newspaper? = null
-    private var taskId: Long? = null
+    private var scheduledTask: ScheduledTask? = null
 
     fun start() {
         val schedule = config.schedule
@@ -42,19 +43,19 @@ class PublicationTask(
             }
         }
 
-        taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
+        scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
             plugin,
             { _ -> checkAndPublish() },
             20L * 60L,
             interval,
-        ).taskId
+        )
 
         logger.info("Publication task scheduled (${config.schedule.lowercase()})")
     }
 
     fun stop() {
-        taskId?.let { Bukkit.getGlobalRegionScheduler().cancel(it) }
-        taskId = null
+        scheduledTask?.cancel()
+        scheduledTask = null
     }
 
     fun publishNow() {
@@ -108,7 +109,7 @@ class PublicationTask(
                 )
             }
 
-            webRenderer.renderAndServe(newspaper)
+            webRenderer?.renderAndServe(newspaper)
 
             lastPublishTime = toTime
             store.clear()

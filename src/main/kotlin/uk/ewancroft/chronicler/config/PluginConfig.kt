@@ -16,8 +16,10 @@ data class TrackingConfig(
 data class LlmConfig(
     val enabled: Boolean,
     val provider: String,
-    val url: String,
     val model: String,
+    val apiKey: String,
+    val baseUrl: String,
+    val ollamaUrl: String,
     val timeoutSeconds: Int,
     val systemPrompt: String,
 )
@@ -56,9 +58,11 @@ class PluginConfig(private val config: FileConfiguration) {
         eventLimit = config.getInt("event-limit", 500).coerceAtLeast(100)
         llm = LlmConfig(
             enabled = config.getBoolean("llm.enabled", true),
-            provider = config.getString("llm.provider", "ollama") ?: "ollama",
-            url = (config.getString("llm.url", "http://localhost:11434") ?: "http://localhost:11434").trimEnd('/'),
+            provider = (config.getString("llm.provider", "ollama") ?: "ollama").lowercase(),
             model = config.getString("llm.model", "llama3.2") ?: "llama3.2",
+            apiKey = config.getString("llm.api-key", "") ?: "",
+            baseUrl = (config.getString("llm.base-url", "https://openrouter.ai/api/v1") ?: "https://openrouter.ai/api/v1").trimEnd('/'),
+            ollamaUrl = (config.getString("llm.ollama-url", "http://localhost:11434") ?: "http://localhost:11434").trimEnd('/'),
             timeoutSeconds = config.getInt("llm.timeout-seconds", 30).coerceIn(5, 120),
             systemPrompt = config.getString("llm.system-prompt", "") ?: "",
         )

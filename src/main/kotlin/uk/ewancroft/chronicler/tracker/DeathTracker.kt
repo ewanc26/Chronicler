@@ -21,7 +21,7 @@ class DeathTracker(
         if (!tracking.deaths) return
         val player = event.player
         val killer = player.killer
-        val message = event.deathMessage()?.let { it -> org.bukkit.event.entity.PlayerDeathEvent.getDeathMessage(it).toString() } ?: "died"
+        val message = event.deathMessage()?.toString() ?: "died"
 
         store.record(
             ChronicleEvent(

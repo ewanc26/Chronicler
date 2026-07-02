@@ -94,10 +94,10 @@ class BuildTracker(
     fun onPlayerMove(event: PlayerMoveEvent) {
         if (!tracking.exploration) return
         val player = event.player
-        val to = event.to ?: return
+        val to = event.to
         val biomes = knownBiomes.getOrPut(player.uniqueId) { mutableSetOf() }
         val biome = player.world.getBiome(to.blockX, to.blockY, to.blockZ)
-        val biomeName = biome.key.value
+        val biomeName = biome.key.toString().substringAfter(':')
 
         if (biomeName !in biomes) {
             biomes.add(biomeName)

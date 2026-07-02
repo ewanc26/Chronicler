@@ -1,21 +1,22 @@
 package uk.ewancroft.chronicler.news
 
 import uk.ewancroft.chronicler.config.NewspaperConfig
-import uk.ewancroft.chronicler.llm.OllamaClient
+import uk.ewancroft.chronicler.llm.ArticleResult
+import uk.ewancroft.chronicler.llm.LlmProvider
 import java.util.logging.Logger
 
 class NewspaperGenerator(
     private val store: EventStore,
     private val newspaperConfig: NewspaperConfig,
-    private val llmClient: OllamaClient?,
+    private val llmProvider: LlmProvider?,
     private val llmEnabled: Boolean,
     private val logger: Logger,
 ) {
+    private val maxStories = newspaperConfig.storiesPerSection
 
     fun generate(issueNumber: Int, fromTime: Long, toTime: Long): Newspaper {
         val events = store.eventsSince(fromTime).filter { it.timestamp <= toTime }
         val sections = mutableListOf<NewspaperSection>()
-        val maxStories = newspaperConfig.storiesPerSection
 
         sections.addAll(generateHeadlines(events))
         sections.addAll(generateObituaries(events))
@@ -217,7 +218,7 @@ class NewspaperGenerator(
         EventType.entries.forEach { type ->
             val count = events.count { it.type == type }
             if (count > 0) {
-                stats.add(Story(type.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }), "$count events", emptyList(), type)
+                stats.add(Story(type.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }, "$count events", emptyList(), type))
             }
         }
         return NewspaperSection("Statistics", stats)
@@ -229,10 +230,14 @@ class NewspaperGenerator(
         events: List<ChronicleEvent>,
         maxStories: Int,
     ): List<Story>? {
-        if (!llmEnabled || llmClient == null || summary.isBlank()) return null
+        if (!llmEnabled || llmProvider == null || summary.isBlank()) return null
+
+        val systemPrompt = llmProvider.let {
+            "You are the editor of a Minecraft server newspaper. Write concise, vivid articles about in-game events. Use a dry, slightly humorous tone.\n\nEach response must be exactly:\n---HEADLINE\n(headline, max 60 chars)\n---BODY\n(2-4 sentence article body)"
+        }
 
         return try {
-            val result = llmClient.generateArticle(sectionTitle, summary)
+            val result = llmProvider.generate(systemPrompt, sectionTitle, summary)
             if (result != null) {
                 val players = events.map { it.playerName }.distinct()
                 val types = events.map { it.type }.distinct()

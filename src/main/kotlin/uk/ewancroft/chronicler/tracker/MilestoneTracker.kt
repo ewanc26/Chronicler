@@ -56,8 +56,8 @@ class MilestoneTracker(
         val player = event.player
         val adv = event.advancement
         val key = adv.key
-        val namespace = key.namespace
-        val path = key.value
+        val namespace = key.toString().substringBefore(':')
+        val path = key.toString().substringAfter(':')
 
         if (namespace != "minecraft") return
         if (path.startsWith("recipes/")) return
@@ -71,7 +71,7 @@ class MilestoneTracker(
                 world = player.world.name,
                 details = mapOf(
                     "advancement" to path,
-                    "displayName" to (adv.displayName()?.toString() ?: path),
+                    "displayName" to adv.displayName().toString()
                 ),
             )
         )

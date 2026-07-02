@@ -29,7 +29,6 @@ data class ChronicleEvent(
     val details: Map<String, String> = emptyMap(),
 )
 
-@Serializable
 data class Newspaper(
     val issueNumber: Int,
     val fromTime: Long,

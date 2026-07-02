@@ -5,7 +5,10 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.command.ChroniclerCommand
 import uk.ewancroft.chronicler.config.PluginConfig
-import uk.ewancroft.chronicler.llm.OllamaClient
+import uk.ewancroft.chronicler.llm.AnthropicProvider
+import uk.ewancroft.chronicler.llm.LlmProvider
+import uk.ewancroft.chronicler.llm.OllamaProvider
+import uk.ewancroft.chronicler.llm.OpenAiProvider
 import uk.ewancroft.chronicler.news.BookRenderer
 import uk.ewancroft.chronicler.news.EventStore
 import uk.ewancroft.chronicler.news.NewspaperGenerator
@@ -19,7 +22,7 @@ import uk.ewancroft.chronicler.tracker.SocialTracker
 class Chronicler : JavaPlugin() {
 
     private lateinit var eventStore: EventStore
-    private lateinit var llmClient: OllamaClient?
+    private var llmProvider: LlmProvider? = null
     private lateinit var generator: NewspaperGenerator
     private lateinit var bookRenderer: BookRenderer
     private var webRenderer: WebRenderer? = null
@@ -43,13 +46,13 @@ class Chronicler : JavaPlugin() {
         eventStore.setMaxEvents(cfg.eventLimit)
         eventStore.load()
 
-        llmClient = if (cfg.llm.enabled) {
-            val client = OllamaClient(cfg.llm)
-            llmAvailable = client.isAvailable()
+        llmProvider = if (cfg.llm.enabled) {
+            val provider = createProvider(cfg.llm)
+            llmAvailable = provider.isAvailable()
             if (!llmAvailable) {
-                logger.warning("Ollama is not reachable at ${cfg.llm.url}. Falling back to template mode.")
+                logger.warning("${provider.name()} is not reachable. Falling back to template mode.")
             }
-            client
+            provider
         } else {
             null
         }
@@ -57,7 +60,7 @@ class Chronicler : JavaPlugin() {
         generator = NewspaperGenerator(
             store = eventStore,
             newspaperConfig = cfg.newspaper,
-            llmClient = llmClient?.takeIf { llmAvailable },
+            llmProvider = llmProvider?.takeIf { llmAvailable },
             llmEnabled = cfg.llm.enabled && llmAvailable,
             logger = logger,
         )
@@ -94,7 +97,7 @@ class Chronicler : JavaPlugin() {
         cmd.setExecutor(command)
         cmd.setTabCompleter(command)
 
-        logger.info("Chronicler enabled. LLM: ${if (llmAvailable) "online (${cfg.llm.model})" else "template mode"}. Web: ${if (cfg.web.enabled) "port ${cfg.web.port}" else "disabled"}.")
+        logger.info("Chronicler enabled. LLM: ${if (llmAvailable) "${cfg.llm.provider} (${cfg.llm.model})" else "template mode"}. Web: ${if (cfg.web.enabled) "port ${cfg.web.port}" else "disabled"}.")
     }
 
     override fun onDisable() {
@@ -153,6 +156,14 @@ class Chronicler : JavaPlugin() {
             webEnabled = cfg?.web?.enabled ?: false,
             webPort = cfg?.web?.port ?: 0,
         )
+    }
+
+    private fun createProvider(cfg: uk.ewancroft.chronicler.config.LlmConfig): LlmProvider {
+        return when (cfg.provider) {
+            "openai", "openai-compatible" -> OpenAiProvider(cfg)
+            "anthropic" -> AnthropicProvider(cfg)
+            else -> OllamaProvider(cfg)
+        }
     }
 
     data class PluginStatus(

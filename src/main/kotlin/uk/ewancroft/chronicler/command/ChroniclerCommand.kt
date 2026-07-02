@@ -93,7 +93,7 @@ class ChroniclerCommand(private val plugin: Chronicler) : CommandExecutor, TabCo
         sender.sendMessage(Component.text(" §7Issue: §f#${status.issueNumber}"))
         sender.sendMessage(Component.text(" §7Events stored: §f${status.eventCount}"))
         sender.sendMessage(Component.text(" §7LLM: §f${if (status.llmAvailable) "§aonline" else "§coffline/disabled"}"))
-        sender.sendMessage(Component.text(" §7Web: §f${if (status.webEnabled) "§a:$webPort" else "§cdisabled"}"))
+        sender.sendMessage(Component.text(" §7Web: §f${if (status.webEnabled) "§a:${status.webPort}" else "§cdisabled"}"))
         return true
     }
 
