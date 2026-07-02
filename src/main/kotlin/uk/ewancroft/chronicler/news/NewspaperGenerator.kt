@@ -26,6 +26,12 @@ class NewspaperGenerator(
         sections.addAll(generateEconomyAndTrading(events))
         sections.addAll(generateSocial(events))
         sections.addAll(generateBreakingNews(events))
+        sections.addAll(generateCraftingAndEnchanting(events))
+        sections.addAll(generateFarmingAndTaming(events))
+        sections.addAll(generateTravelAndTransport(events))
+        sections.addAll(generateWorldEvents(events))
+        sections.addAll(generateCommunityLife(events))
+        sections.addAll(generateAdventures(events))
         if (newspaperConfig.showStatistics) {
             sections.add(generateStatistics(events))
         }
@@ -298,6 +304,417 @@ class NewspaperGenerator(
         )
 
         return listOf(NewspaperSection("Breaking News", stories))
+    }
+
+    private fun generateCraftingAndEnchanting(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val craftEvents = events.filter { it.type == EventType.CRAFT }
+        val enchantEvents = events.filter { it.type == EventType.ENCHANT }
+        val furnaceEvents = events.filter { it.type == EventType.FURNACE_EXTRACT }
+        if (craftEvents.isEmpty() && enchantEvents.isEmpty() && furnaceEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (craftEvents.isNotEmpty()) {
+                appendLine("Items crafted (${craftEvents.size} total):")
+                craftEvents.groupBy { it.details["item"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(5).forEach { (item, evs) ->
+                    appendLine("- $item: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (enchantEvents.isNotEmpty()) {
+                appendLine("Enchantments (${enchantEvents.size} total):")
+                enchantEvents.groupBy { it.details["item"] ?: "unknown" }.entries.take(5).forEach { (item, evs) ->
+                    appendLine("- $item enchanted ${evs.size}x (cost: ${evs.mapNotNull { it.details["level"] }.joinToString(", ")})")
+                }
+                appendLine()
+            }
+            if (furnaceEvents.isNotEmpty()) {
+                appendLine("Furnace output (${furnaceEvents.size} extracts):")
+                furnaceEvents.groupBy { it.details["item"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(3).forEach { (item, evs) ->
+                    val total = evs.mapNotNull { it.details["amount"]?.toIntOrNull() }.sum()
+                    appendLine("- $item: $total units by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+            }
+        }
+
+        val stories = generateArticles("Crafting & Enchanting", summary, craftEvents + enchantEvents + furnaceEvents, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (craftEvents.isNotEmpty()) {
+                val top = craftEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Master Crafter: ${top.key}", "${top.value.size} items crafted", listOf(top.key), EventType.CRAFT))
+            }
+            if (enchantEvents.isNotEmpty()) {
+                s.add(Story("Enchanting Report", "${enchantEvents.size} enchantments performed", enchantEvents.map { it.playerName }.distinct(), EventType.ENCHANT))
+            }
+            if (furnaceEvents.isNotEmpty()) {
+                val top = furnaceEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Industrialist: ${top.key}", "${top.value.size} furnace extracts", listOf(top.key), EventType.FURNACE_EXTRACT))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Crafting & Enchanting", stories))
+    }
+
+    private fun generateFarmingAndTaming(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val fishEvents = events.filter { it.type == EventType.FISH }
+        val tameEvents = events.filter { it.type == EventType.TAME }
+        val breedEvents = events.filter { it.type == EventType.BREED }
+        val shearEvents = events.filter { it.type == EventType.SHEAR }
+        val dyeEvents = events.filter { it.type == EventType.SHEEP_DYE }
+        if (fishEvents.isEmpty() && tameEvents.isEmpty() && breedEvents.isEmpty() && shearEvents.isEmpty() && dyeEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (fishEvents.isNotEmpty()) {
+                appendLine("Fishing (${fishEvents.size} catches):")
+                fishEvents.groupBy { it.playerName }.entries.sortedByDescending { it.value.size }.take(3).forEach { (player, catches) ->
+                    val types = catches.mapNotNull { it.details["caught"] }.distinct()
+                    appendLine("- $player: ${catches.size} catches (${types.take(3).joinToString(", ")})")
+                }
+                appendLine()
+            }
+            if (tameEvents.isNotEmpty()) {
+                appendLine("Taming (${tameEvents.size} animals tamed):")
+                tameEvents.groupBy { it.details["entity"] ?: "unknown" }.entries.take(3).forEach { (entity, evs) ->
+                    appendLine("- $entity: tamed by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (breedEvents.isNotEmpty()) {
+                appendLine("Breeding (${breedEvents.size} animals bred):")
+                breedEvents.groupBy { it.details["entity"] ?: "unknown" }.entries.take(3).forEach { (entity, evs) ->
+                    appendLine("- $entity: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (shearEvents.isNotEmpty()) {
+                appendLine("Shearing (${shearEvents.size} animals sheared)")
+            }
+            if (dyeEvents.isNotEmpty()) {
+                appendLine("Sheep dyed (${dyeEvents.size} times):")
+                dyeEvents.groupBy { it.details["colour"] ?: "unknown" }.entries.take(3).forEach { (colour, evs) ->
+                    appendLine("- $colour: ${evs.size}x")
+                }
+            }
+        }
+
+        val stories = generateArticles("Farming & Taming", summary, fishEvents + tameEvents + breedEvents + shearEvents + dyeEvents, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (fishEvents.isNotEmpty()) {
+                val top = fishEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Angler: ${top.key}", "${top.value.size} fish caught", listOf(top.key), EventType.FISH))
+            }
+            if (tameEvents.isNotEmpty()) {
+                s.add(Story("Animal Tamer", "${tameEvents.size} animals tamed", tameEvents.map { it.playerName }.distinct(), EventType.TAME))
+            }
+            if (breedEvents.isNotEmpty()) {
+                s.add(Story("Breeding Report", "${breedEvents.size} animals bred", breedEvents.map { it.playerName }.distinct(), EventType.BREED))
+            }
+            if (shearEvents.isNotEmpty()) {
+                s.add(Story("Wool Harvest", "${shearEvents.size} animals sheared", shearEvents.map { it.playerName }.distinct(), EventType.SHEAR))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Farming & Taming", stories))
+    }
+
+    private fun generateTravelAndTransport(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val portalEvents = events.filter { it.type == EventType.PORTAL }
+        val teleportEvents = events.filter { it.type == EventType.TELEPORT }
+        val vehicleEvents = events.filter { it.type == EventType.VEHICLE_RIDE }
+        if (portalEvents.isEmpty() && teleportEvents.isEmpty() && vehicleEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (portalEvents.isNotEmpty()) {
+                appendLine("Portal usage (${portalEvents.size} trips):")
+                portalEvents.groupBy { it.details["to"] ?: "unknown" }.entries.take(3).forEach { (dest, evs) ->
+                    appendLine("- To $dest: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (teleportEvents.isNotEmpty()) {
+                appendLine("Teleports (${teleportEvents.size} total):")
+                teleportEvents.groupBy { it.details["cause"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(3).forEach { (cause, evs) ->
+                    appendLine("- $cause: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (vehicleEvents.isNotEmpty()) {
+                appendLine("Vehicles (${vehicleEvents.size} rides):")
+                vehicleEvents.groupBy { it.details["vehicle"] ?: "unknown" }.entries.take(3).forEach { (vehicle, evs) ->
+                    appendLine("- $vehicle: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+            }
+        }
+
+        val stories = generateArticles("Travel & Transport", summary, portalEvents + teleportEvents + vehicleEvents, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (portalEvents.isNotEmpty()) {
+                s.add(Story("Portal Traffic", "${portalEvents.size} portal trips", portalEvents.map { it.playerName }.distinct(), EventType.PORTAL))
+            }
+            if (teleportEvents.isNotEmpty()) {
+                val top = teleportEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Frequent Teleporter: ${top.key}", "${top.value.size} teleports", listOf(top.key), EventType.TELEPORT))
+            }
+            if (vehicleEvents.isNotEmpty()) {
+                s.add(Story("Transport Report", "${vehicleEvents.size} vehicle rides", vehicleEvents.map { it.playerName }.distinct(), EventType.VEHICLE_RIDE))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Travel & Transport", stories))
+    }
+
+    private fun generateWorldEvents(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val explosionEvents = events.filter { it.type == EventType.EXPLOSION }
+        val lightningEvents = events.filter { it.type == EventType.LIGHTNING }
+        val weatherEvents = events.filter { it.type == EventType.WEATHER }
+        val thunderEvents = events.filter { it.type == EventType.THUNDER }
+        val raidEvents = events.filter { it.type == EventType.RAID }
+        val growEvents = events.filter { it.type == EventType.STRUCTURE_GROW }
+        if (explosionEvents.isEmpty() && lightningEvents.isEmpty() && weatherEvents.isEmpty() && thunderEvents.isEmpty() && raidEvents.isEmpty() && growEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (explosionEvents.isNotEmpty()) {
+                appendLine("Explosions (${explosionEvents.size} total):")
+                explosionEvents.groupBy { it.details["source"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(3).forEach { (source, evs) ->
+                    val blocks = evs.mapNotNull { it.details["blocks"]?.toIntOrNull() }.sum()
+                    appendLine("- $source: ${evs.size} explosions, $blocks blocks destroyed")
+                }
+                appendLine()
+            }
+            if (lightningEvents.isNotEmpty()) {
+                appendLine("Lightning strikes: ${lightningEvents.size}")
+                appendLine()
+            }
+            if (weatherEvents.isNotEmpty() || thunderEvents.isNotEmpty()) {
+                appendLine("Weather changes: ${weatherEvents.size + thunderEvents.size}")
+                appendLine()
+            }
+            if (raidEvents.isNotEmpty()) {
+                appendLine("Raids triggered: ${raidEvents.size}")
+                raidEvents.take(3).forEach { ev ->
+                    appendLine("- by ${ev.playerName} at ${ev.details["location"]}")
+                }
+                appendLine()
+            }
+            if (growEvents.isNotEmpty()) {
+                appendLine("Structures grown: ${growEvents.size}")
+            }
+        }
+
+        val stories = generateArticles("World Events", summary, explosionEvents + lightningEvents + weatherEvents + thunderEvents + raidEvents + growEvents, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (explosionEvents.isNotEmpty()) {
+                val totalBlocks = explosionEvents.mapNotNull { it.details["blocks"]?.toIntOrNull() }.sum()
+                s.add(Story("Explosions", "${explosionEvents.size} explosions destroyed $totalBlocks blocks", emptyList(), EventType.EXPLOSION))
+            }
+            if (lightningEvents.isNotEmpty()) {
+                s.add(Story("Storm Activity", "${lightningEvents.size} lightning strikes recorded", emptyList(), EventType.LIGHTNING))
+            }
+            if (raidEvents.isNotEmpty()) {
+                s.add(Story("Raid Alert", "${raidEvents.size} raids triggered by ${raidEvents.map { it.playerName }.distinct().joinToString(", ")}", raidEvents.map { it.playerName }.distinct(), EventType.RAID))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("World Events", stories))
+    }
+
+    private fun generateCommunityLife(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val chatEvents = events.filter { it.type == EventType.CHAT }
+        val sleepEvents = events.filter { it.type == EventType.SLEEP }
+        val consumeEvents = events.filter { it.type == EventType.ITEM_CONSUME }
+        val breakEvents = events.filter { it.type == EventType.ITEM_BREAK }
+        val signEvents = events.filter { it.type == EventType.SIGN_EDIT }
+        val respawnEvents = events.filter { it.type == EventType.RESPAWN }
+        val kickEvents = events.filter { it.type == EventType.KICK }
+        val gamemodeEvents = events.filter { it.type == EventType.GAMEMODE }
+        if (chatEvents.isEmpty() && sleepEvents.isEmpty() && consumeEvents.isEmpty() && breakEvents.isEmpty() && signEvents.isEmpty() && respawnEvents.isEmpty() && kickEvents.isEmpty() && gamemodeEvents.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (chatEvents.isNotEmpty()) {
+                appendLine("Chat activity (${chatEvents.size} messages):")
+                chatEvents.groupBy { it.playerName }.entries.sortedByDescending { it.value.size }.take(3).forEach { (player, msgs) ->
+                    appendLine("- $player: ${msgs.size} messages")
+                }
+                appendLine()
+            }
+            if (sleepEvents.isNotEmpty()) {
+                appendLine("Sleep (${sleepEvents.size} times):")
+                sleepEvents.groupBy { it.playerName }.entries.take(3).forEach { (player, evs) ->
+                    appendLine("- $player slept ${evs.size}x")
+                }
+                appendLine()
+            }
+            if (consumeEvents.isNotEmpty()) {
+                appendLine("Consumption (${consumeEvents.size} items):")
+                consumeEvents.groupBy { it.details["item"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(3).forEach { (item, evs) ->
+                    appendLine("- $item: ${evs.size}x")
+                }
+                appendLine()
+            }
+            if (breakEvents.isNotEmpty()) {
+                appendLine("Tools broken (${breakEvents.size}):")
+                breakEvents.groupBy { it.details["item"] ?: "unknown" }.entries.take(3).forEach { (item, evs) ->
+                    appendLine("- $item: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (signEvents.isNotEmpty()) {
+                appendLine("Signs edited: ${signEvents.size}")
+                signEvents.take(3).forEach { ev ->
+                    appendLine("- ${ev.playerName}: \"${ev.details["text"]?.take(50)}\"")
+                }
+                appendLine()
+            }
+            if (respawnEvents.isNotEmpty()) {
+                appendLine("Respawns: ${respawnEvents.size}")
+                appendLine()
+            }
+            if (kickEvents.isNotEmpty()) {
+                appendLine("Kicks: ${kickEvents.size}")
+                kickEvents.take(3).forEach { ev ->
+                    appendLine("- ${ev.playerName}: ${ev.details["reason"]}")
+                }
+                appendLine()
+            }
+            if (gamemodeEvents.isNotEmpty()) {
+                appendLine("Game mode changes: ${gamemodeEvents.size}")
+                gamemodeEvents.take(3).forEach { ev ->
+                    appendLine("- ${ev.playerName}: ${ev.details["from"]} → ${ev.details["to"]}")
+                }
+            }
+        }
+
+        val stories = generateArticles("Community Life", summary, chatEvents + sleepEvents + consumeEvents + breakEvents + signEvents + respawnEvents + kickEvents + gamemodeEvents, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (chatEvents.isNotEmpty()) {
+                val top = chatEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Chattiest: ${top.key}", "${top.value.size} messages sent", listOf(top.key), EventType.CHAT))
+            }
+            if (sleepEvents.isNotEmpty()) {
+                s.add(Story("Restful Nights", "${sleepEvents.size} bed entries recorded", sleepEvents.map { it.playerName }.distinct(), EventType.SLEEP))
+            }
+            if (consumeEvents.isNotEmpty()) {
+                s.add(Story("Dining Report", "${consumeEvents.size} items consumed", consumeEvents.map { it.playerName }.distinct(), EventType.ITEM_CONSUME))
+            }
+            if (breakEvents.isNotEmpty()) {
+                s.add(Story("Tool Casualties", "${breakEvents.size} tools broken", breakEvents.map { it.playerName }.distinct(), EventType.ITEM_BREAK))
+            }
+            if (signEvents.isNotEmpty()) {
+                s.add(Story("Sign Posts", "${signEvents.size} signs written", signEvents.map { it.playerName }.distinct(), EventType.SIGN_EDIT))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Community Life", stories))
+    }
+
+    private fun generateAdventures(events: List<ChronicleEvent>): List<NewspaperSection> {
+        val projectileEvents = events.filter { it.type == EventType.PROJECTILE_LAUNCH }
+        val potionEvents = events.filter { it.type == EventType.POTION_THROW }
+        val fireworkEvents = events.filter { it.type == EventType.FIREWORK }
+        val riptideEvents = events.filter { it.type == EventType.RIPTIDE }
+        val flightEvents = events.filter { it.type == EventType.FLIGHT_TOGGLE }
+        val glideEvents = events.filter { it.type == EventType.GLIDE_TOGGLE }
+        val eggEvents = events.filter { it.type == EventType.EGG_THROW }
+        val bucketEvents = events.filter { it.type == EventType.BUCKET }
+        val hangingBreakEvents = events.filter { it.type == EventType.HANGING_BREAK }
+        val hangingPlaceEvents = events.filter { it.type == EventType.HANGING_PLACE }
+        val transformEvents = events.filter { it.type == EventType.ENTITY_TRANSFORM }
+        val slimeEvents = events.filter { it.type == EventType.SLIME_SPLIT }
+        val pigZapEvents = events.filter { it.type == EventType.PIG_ZAP }
+        val creeperEvents = events.filter { it.type == EventType.CREEPER_POWER }
+        val allAdventure = projectileEvents + potionEvents + fireworkEvents + riptideEvents + flightEvents + glideEvents + eggEvents + bucketEvents + hangingBreakEvents + hangingPlaceEvents + transformEvents + slimeEvents + pigZapEvents + creeperEvents
+        if (allAdventure.isEmpty()) return emptyList()
+
+        val summary = buildString {
+            if (projectileEvents.isNotEmpty()) {
+                appendLine("Projectiles launched (${projectileEvents.size}):")
+                projectileEvents.groupBy { it.details["projectile"] ?: "unknown" }.entries.sortedByDescending { it.value.size }.take(3).forEach { (proj, evs) ->
+                    appendLine("- $proj: ${evs.size}x by ${evs.map { it.playerName }.distinct().joinToString(", ")}")
+                }
+                appendLine()
+            }
+            if (potionEvents.isNotEmpty()) {
+                appendLine("Potions thrown: ${potionEvents.size}")
+                appendLine()
+            }
+            if (fireworkEvents.isNotEmpty()) {
+                appendLine("Fireworks: ${fireworkEvents.size}")
+                appendLine()
+            }
+            if (riptideEvents.isNotEmpty()) {
+                appendLine("Riptide uses: ${riptideEvents.size}")
+                appendLine()
+            }
+            if (flightEvents.isNotEmpty()) {
+                appendLine("Flight toggles: ${flightEvents.size}")
+                appendLine()
+            }
+            if (glideEvents.isNotEmpty()) {
+                appendLine("Elytra glides: ${glideEvents.size}")
+                appendLine()
+            }
+            if (eggEvents.isNotEmpty()) {
+                appendLine("Eggs thrown: ${eggEvents.size}")
+                appendLine()
+            }
+            if (bucketEvents.isNotEmpty()) {
+                appendLine("Bucket usage (${bucketEvents.size}):")
+                bucketEvents.groupBy { it.details["action"] ?: "unknown" }.entries.take(2).forEach { (action, evs) ->
+                    appendLine("- $action: ${evs.size}x")
+                }
+                appendLine()
+            }
+            if (hangingBreakEvents.isNotEmpty() || hangingPlaceEvents.isNotEmpty()) {
+                appendLine("Hanging entities: ${hangingPlaceEvents.size} placed, ${hangingBreakEvents.size} broken")
+                appendLine()
+            }
+            if (transformEvents.isNotEmpty()) {
+                appendLine("Entity transforms (${transformEvents.size}):")
+                transformEvents.groupBy { Pair(it.details["from"] ?: "unknown", it.details["to"] ?: "unknown") }.entries.take(3).forEach { (key, evs) ->
+                    val (from, to) = key
+                    appendLine("- $from → $to: ${evs.size}x")
+                }
+                appendLine()
+            }
+            if (slimeEvents.isNotEmpty()) {
+                appendLine("Slime splits: ${slimeEvents.size}")
+                appendLine()
+            }
+            if (pigZapEvents.isNotEmpty()) {
+                appendLine("Pigs zapped by lightning: ${pigZapEvents.size}")
+                appendLine()
+            }
+            if (creeperEvents.isNotEmpty()) {
+                appendLine("Creepers charged: ${creeperEvents.size}")
+            }
+        }
+
+        val stories = generateArticles("Adventures", summary, allAdventure, maxStories = 5) ?: run {
+            val s = mutableListOf<Story>()
+            if (projectileEvents.isNotEmpty()) {
+                val top = projectileEvents.groupBy { it.playerName }.maxByOrNull { it.value.size }
+                if (top != null) s.add(Story("Marksman: ${top.key}", "${top.value.size} projectiles launched", listOf(top.key), EventType.PROJECTILE_LAUNCH))
+            }
+            if (fireworkEvents.isNotEmpty()) {
+                s.add(Story("Fireworks Display", "${fireworkEvents.size} fireworks launched", fireworkEvents.map { it.playerName }.distinct(), EventType.FIREWORK))
+            }
+            if (glideEvents.isNotEmpty()) {
+                s.add(Story("Elytra Flights", "${glideEvents.size} glide toggles", glideEvents.map { it.playerName }.distinct(), EventType.GLIDE_TOGGLE))
+            }
+            if (transformEvents.isNotEmpty()) {
+                s.add(Story("Entity Transforms", "${transformEvents.size} entities transformed", emptyList(), EventType.ENTITY_TRANSFORM))
+            }
+            if (bucketEvents.isNotEmpty()) {
+                s.add(Story("Bucket Activity", "${bucketEvents.size} bucket operations", bucketEvents.map { it.playerName }.distinct(), EventType.BUCKET))
+            }
+            s.take(maxStories)
+        }
+
+        return listOf(NewspaperSection("Adventures", stories))
     }
 
     private fun generateStatistics(events: List<ChronicleEvent>): NewspaperSection {

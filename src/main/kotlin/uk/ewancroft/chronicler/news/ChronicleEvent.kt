@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class EventType {
+    // Existing
     DEATH,
     KILL,
     PVP_KILL,
@@ -25,6 +26,50 @@ enum class EventType {
     ORE_DISCOVERY,
     DISTANCE_MILESTONE,
     END_ENTER,
+    // Player activity
+    CHAT,
+    CRAFT,
+    ENCHANT,
+    FISH,
+    SLEEP,
+    ITEM_CONSUME,
+    ITEM_BREAK,
+    SHEAR,
+    FURNACE_EXTRACT,
+    // World
+    PORTAL,
+    TELEPORT,
+    EXPLOSION,
+    LIGHTNING,
+    WEATHER,
+    THUNDER,
+    RAID,
+    STRUCTURE_GROW,
+    // Entity
+    TAME,
+    BREED,
+    ENTITY_TRANSFORM,
+    SLIME_SPLIT,
+    PIG_ZAP,
+    CREEPER_POWER,
+    SHEEP_DYE,
+    // Combat
+    PROJECTILE_LAUNCH,
+    POTION_THROW,
+    FIREWORK,
+    // Player actions
+    RESPAWN,
+    KICK,
+    GAMEMODE,
+    SIGN_EDIT,
+    VEHICLE_RIDE,
+    BUCKET,
+    RIPTIDE,
+    FLIGHT_TOGGLE,
+    GLIDE_TOGGLE,
+    EGG_THROW,
+    HANGING_BREAK,
+    HANGING_PLACE,
 }
 
 @Serializable

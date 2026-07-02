@@ -22,16 +22,21 @@ import uk.ewancroft.chronicler.news.NewspaperGenerator
 import uk.ewancroft.chronicler.news.WebRenderer
 import uk.ewancroft.chronicler.task.HeadlineTicker
 import uk.ewancroft.chronicler.task.PublicationTask
+import uk.ewancroft.chronicler.tracker.ActivityTracker
 import uk.ewancroft.chronicler.tracker.BreakingNewsTracker
 import uk.ewancroft.chronicler.tracker.BuildTracker
+import uk.ewancroft.chronicler.tracker.CombatTracker
 import uk.ewancroft.chronicler.tracker.DeathTracker
 import uk.ewancroft.chronicler.tracker.EconomyTracker
+import uk.ewancroft.chronicler.tracker.EntityTracker
 import uk.ewancroft.chronicler.tracker.MilestoneTracker
+import uk.ewancroft.chronicler.tracker.PlayerActionTracker
 import uk.ewancroft.chronicler.tracker.PrivateMessageTracker
 import uk.ewancroft.chronicler.tracker.SessionStore
 import uk.ewancroft.chronicler.tracker.SessionTracker
 import uk.ewancroft.chronicler.tracker.SocialTracker
 import uk.ewancroft.chronicler.tracker.SubscribeStore
+import uk.ewancroft.chronicler.tracker.WorldTracker
 import uk.ewancroft.chronicler.util.UpdateChecker
 import java.io.File
 
@@ -141,6 +146,11 @@ class Chronicler : JavaPlugin() {
             PrivateMessageTracker(eventStore, cfg.tracking),
             BreakingNewsTracker(eventStore, cfg),
             economyTracker,
+            ActivityTracker(eventStore, cfg.tracking),
+            WorldTracker(eventStore, cfg.tracking),
+            EntityTracker(eventStore, cfg.tracking),
+            CombatTracker(eventStore, cfg.tracking),
+            PlayerActionTracker(eventStore, cfg.tracking),
         )
         trackers.add(SessionTracker(eventStore, sessionStore, cfg.tracking))
         trackers.forEach { server.pluginManager.registerEvents(it, this) }

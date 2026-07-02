@@ -24,6 +24,20 @@ tracking:
   exploration: true
   social: true
   economy: true
+  chat: true
+  crafting: true
+  fishing: true
+  sleep: true
+  portals: true
+  entities: true
+  explosions: true
+  weather: true
+  raids: true
+  teleport: true
+  consumption: true
+  projectiles: true
+  vehicles: true
+  misc: true
 
 # Maximum events stored per category before older ones are pruned.
 event-limit: 500
