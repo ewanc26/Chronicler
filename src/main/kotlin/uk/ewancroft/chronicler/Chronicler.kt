@@ -335,7 +335,12 @@ class Chronicler : JavaPlugin() {
         val s = state
         return PluginStatus(
             enabled = s?.config?.enabled ?: false,
-            schedule = s?.config?.schedule ?: "unknown",
+            schedule = buildString {
+                append(s?.config?.schedule ?: "unknown")
+                if (s?.config?.scheduleBase == uk.ewancroft.chronicler.config.ScheduleBase.IN_GAME) {
+                    append(" (in-game)")
+                }
+            },
             issueNumber = s?.publicationTask?.getIssueNumber() ?: 0,
             eventCount = s?.eventStore?.allEvents()?.size ?: 0,
             llmAvailable = s?.llmAvailable ?: false,

@@ -6,6 +6,8 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import uk.ewancroft.chronicler.config.Messages
 import uk.ewancroft.chronicler.config.PluginConfig
+import uk.ewancroft.chronicler.config.ScheduleBase
+import uk.ewancroft.chronicler.config.publicationIntervalTicks
 import uk.ewancroft.chronicler.news.ArchiveStore
 import uk.ewancroft.chronicler.news.BookRenderer
 import uk.ewancroft.chronicler.news.EventStore
@@ -38,6 +40,7 @@ class PublicationTask(
 
     private var issueNumber = 0
     private var lastPublishTime = 0L
+    private var lastPublishGameTime = 0L
     private var latestBook: ItemStack? = null
     private var latestNewspaper: Newspaper? = null
     private var draftNewspaper: Newspaper? = null
@@ -58,24 +61,11 @@ class PublicationTask(
             doPublish(isIssueZero = true, cutoffTime = activationTime)
         }
 
-        val schedule = config.schedule
-        val interval = when (schedule.uppercase()) {
-            "HOURLY" -> 20L * 60L * 60L
-            "DAILY" -> 20L * 60L * 60L * 24L
-            "WEEKLY" -> 20L * 60L * 60L * 24L * 7L
-            "BIWEEKLY" -> 20L * 60L * 60L * 24L * 14L
-            "MONTHLY" -> 20L * 60L * 60L * 24L * 30L
-            else -> {
-                val ticks = schedule.toLongOrNull()
-                if (ticks != null && ticks > 0) ticks else 20L * 60L * 60L * 24L * 7L
-            }
-        }
-
         scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
             plugin,
             { _ -> checkAndPublish() },
-            20L * 60L,
-            interval,
+            20L,
+            20L,
         )
 
         logger.info("Publication task scheduled (${config.schedule.lowercase()})")
@@ -195,8 +185,18 @@ class PublicationTask(
         if (!config.enabled) return
 
         val now = System.currentTimeMillis()
-        val calendar = Calendar.getInstance()
+        val shouldPublish = when (config.scheduleBase) {
+            ScheduleBase.REAL_TIME -> shouldPublishRealTime(now)
+            ScheduleBase.IN_GAME -> shouldPublishInGame()
+        }
 
+        if (shouldPublish) {
+            doPublish()
+        }
+    }
+
+    private fun shouldPublishRealTime(now: Long): Boolean {
+        val calendar = Calendar.getInstance()
         val shouldPublish = when (config.schedule.uppercase()) {
             "DAILY" -> true
             "WEEKLY" -> calendar.get(Calendar.DAY_OF_WEEK) == dayOfWeekToCalendar(config.publishDay)
@@ -209,10 +209,18 @@ class PublicationTask(
 
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val correctHour = config.publishHour
+        return shouldPublish && hour == correctHour && (now - lastPublishTime) > 3600_000L
+    }
 
-        if (shouldPublish && hour == correctHour && (now - lastPublishTime) > 3600_000L) {
-            doPublish()
+    private fun shouldPublishInGame(): Boolean {
+        val interval = publicationIntervalTicks(config.schedule, config.scheduleBase)
+        if (interval <= 0L) return false
+        if (lastPublishGameTime <= 0L) {
+            lastPublishGameTime = currentGameTime()
+            return false
         }
+        val currentGameTime = currentGameTime()
+        return currentGameTime > 0L && (currentGameTime - lastPublishGameTime) >= interval
     }
 
     private fun doPublish(isIssueZero: Boolean = false, cutoffTime: Long = System.currentTimeMillis()): Boolean {
@@ -272,6 +280,7 @@ class PublicationTask(
             if (webRenderer != null) logger.info("Rendered web edition for issue #$number.")
 
             lastPublishTime = toTime
+            lastPublishGameTime = currentGameTime()
             if (!isIssueZero) {
                 issueNumber = number
             }
@@ -294,17 +303,23 @@ class PublicationTask(
                     issueNumber = lines[0].toIntOrNull() ?: 0
                     lastPublishTime = lines[1].toLongOrNull() ?: System.currentTimeMillis()
                 }
+                if (lines.size >= 3) {
+                    lastPublishGameTime = lines[2].toLongOrNull() ?: currentGameTime()
+                } else if (config.scheduleBase == ScheduleBase.IN_GAME) {
+                    lastPublishGameTime = currentGameTime()
+                }
             }
         } catch (e: Exception) {
             logger.log(Level.WARNING, "Failed to load publication state from $stateFile; starting from issue zero.", e)
             lastPublishTime = 0L
+            lastPublishGameTime = 0L
         }
     }
 
     private fun saveState() {
         try {
             Files.createDirectories(stateFile.parent)
-            Files.writeString(stateFile, "$issueNumber\n$lastPublishTime")
+            Files.writeString(stateFile, "$issueNumber\n$lastPublishTime\n$lastPublishGameTime")
         } catch (e: Exception) {
             logger.log(Level.SEVERE, "Failed to save publication state to $stateFile.", e)
         }
@@ -344,4 +359,6 @@ class PublicationTask(
             else -> Calendar.MONDAY
         }
     }
+
+    private fun currentGameTime(): Long = Bukkit.getWorlds().firstOrNull()?.fullTime ?: 0L
 }

@@ -9,7 +9,11 @@ enabled: true
 # Or a custom interval in ticks (20 ticks = 1 second).
 schedule: WEEKLY
 
-# Day of week / time for publication (used for WEEKLY/BIWEEKLY/MONTHLY).
+# Time base for publication scheduling.
+# REAL_TIME uses server time. IN_GAME uses Minecraft time and ticks.
+schedule-base: REAL_TIME
+
+# Day of week / time for publication (used for REAL_TIME WEEKLY/BIWEEKLY/MONTHLY).
 # 0 = Monday, 6 = Sunday. Hour in 0-23 server time.
 publish-day: 0
 publish-hour: 8

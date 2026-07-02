@@ -55,6 +55,8 @@ enabled: true
 
 # Publication schedule: DAILY, WEEKLY, BIWEEKLY, MONTHLY, or ticks
 schedule: WEEKLY
+# Time base: REAL_TIME (default) or IN_GAME
+schedule-base: REAL_TIME
 publish-day: 0        # 0=Monday, 6=Sunday
 publish-hour: 8       # Hour in 0-23
 

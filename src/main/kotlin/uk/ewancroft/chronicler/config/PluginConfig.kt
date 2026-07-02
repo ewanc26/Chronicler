@@ -71,6 +71,7 @@ class PluginConfig(private val config: FileConfiguration) {
 
     var enabled: Boolean
     val schedule: String
+    val scheduleBase: ScheduleBase
     val publishDay: Int
     val publishHour: Int
     val tracking: TrackingConfig
@@ -90,6 +91,7 @@ class PluginConfig(private val config: FileConfiguration) {
     init {
         enabled = config.getBoolean("enabled", true)
         schedule = config.getString("schedule", "WEEKLY") ?: "WEEKLY"
+        scheduleBase = ScheduleBase.from(config.getString("schedule-base", "REAL_TIME"))
         publishDay = config.getInt("publish-day", 0)
         publishHour = config.getInt("publish-hour", 8)
         eventLimit = config.getInt("event-limit", 500).coerceAtLeast(100)
